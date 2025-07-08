@@ -17,8 +17,10 @@ import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+// @ts-ignore
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, SubmenuStackParamList } from '../navigation/MainNavigator';
+// @ts-ignore
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { theme, spacing, typography } from '../theme/theme';
@@ -348,6 +350,10 @@ const DashboardScreen: React.FC = () => {
                 <TouchableOpacity onPress={() => navigation.navigate('Payroll' as never)} style={styles.quickActionButtonModern}>
                   <Icon name="file-document" size={28} color={theme.colors.info} />
                   <Text style={styles.quickActionLabel}>Payslip</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('ExpenseClaim' as never)} style={styles.quickActionButtonModern}>
+                  <Icon name="cash-multiple" size={28} color={theme.colors.accent} />
+                  <Text style={styles.quickActionLabel}>Expense Claim</Text>
                 </TouchableOpacity>
               </View>
             </Card.Content>

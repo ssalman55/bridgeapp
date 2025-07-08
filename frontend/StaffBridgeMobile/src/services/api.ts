@@ -157,7 +157,7 @@ class ApiService {
   }
 
   async getLeaveHistory() {
-    const response = await this.api.get('/leave/history');
+    const response = await this.api.get('/leave/my');
     return response.data;
   }
 
