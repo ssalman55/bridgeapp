@@ -112,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       dispatch({ type: 'AUTH_START' });
       const data = await apiService.login(email, password);
+      console.log('Login response:', data);
       if (data.success) {
         const user = data.user;
         // Map fullName to firstName and lastName if needed

@@ -32,6 +32,7 @@ import TrainingHistoryScreen from '../screens/TrainingHistoryScreen';
 import DrawerContent from '../components/DrawerContent';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import AttendanceHistoryScreen from '../screens/AttendanceHistoryScreen';
+import TaskDetailScreen from '../screens/TaskDetailScreen';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -56,6 +57,7 @@ export type SubmenuStackParamList = {
   // Tasks submenu
   AssignedTasks: undefined;
   PerformanceEvaluation: undefined;
+  TaskDetail: { task: any };
   
   // More submenu
   StaffDirectory: undefined;
@@ -85,6 +87,7 @@ const SubmenuStackNavigator: React.FC = () => {
       {/* Tasks submenu */}
       <Stack.Screen name="AssignedTasks" component={AssignedTasksScreen} />
       <Stack.Screen name="PerformanceEvaluation" component={PerformanceScreen} />
+      <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
       
       {/* More submenu */}
       <Stack.Screen name="StaffDirectory" component={StaffDirectoryScreen} />

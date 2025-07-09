@@ -242,6 +242,11 @@ class ApiService {
     return response.data;
   }
 
+  async getMyTrainingRequests(params?: { status?: string; startDate?: string; endDate?: string }) {
+    const response = await this.api.get('/training-requests/my', { params });
+    return response.data;
+  }
+
   // Performance endpoints
   async getPerformanceEvaluations(params?: { year?: string }) {
     const response = await this.api.get('/performance-evaluations', { params });
@@ -304,6 +309,35 @@ class ApiService {
 
   async getMyExpenseClaims() {
     const response = await this.api.get('/expense-claims/my');
+    return response.data;
+  }
+
+  // Inventory endpoints
+  async getMyInventory() {
+    const response = await this.api.get('/inventory/my');
+    return response.data;
+  }
+
+  // Task endpoints
+  async getMyTasks() {
+    const response = await this.api.get('/tasks/staff');
+    return response.data;
+  }
+
+  async updateTaskStatus(id: string, data: { status: string; note?: string }) {
+    const response = await this.api.patch(`/tasks/${id}/status`, data);
+    return response.data;
+  }
+
+  // Event endpoints
+  async getEvents() {
+    const response = await this.api.get('/events');
+    return response.data;
+  }
+
+  // Staff Directory endpoint
+  async getStaffDirectory() {
+    const response = await this.api.get('/users');
     return response.data;
   }
 }
