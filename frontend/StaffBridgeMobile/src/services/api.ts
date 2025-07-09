@@ -301,6 +301,11 @@ class ApiService {
       ? response.data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit)
       : [];
   }
+
+  async getMyExpenseClaims() {
+    const response = await this.api.get('/expense-claims/my');
+    return response.data;
+  }
 }
 
 export default new ApiService(); 
