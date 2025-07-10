@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager, Linking } from 'react-native';
 import { Card, Title, Paragraph, ActivityIndicator, Chip, TextInput, HelperText } from 'react-native-paper';
 import { useTheme } from '../context/ThemeContext';
-// import apiService from '../services/api'; // Uncomment and use when backend is ready
+import apiService from '../services/api';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+const API_BASE_URL = 'http://10.0.2.2:5000/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -50,38 +53,36 @@ const formatDate = (dateString: string) => {
 };
 
 const ClaimsHistoryScreen: React.FC = () => {
-  const [loading, setLoading] = useState(false); // Set to true if fetching from API
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [claims, setClaims] = useState<any[]>(mockClaims); // Replace with API data
+  const [claims, setClaims] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { theme } = useTheme();
 
-  // Uncomment and use when backend is ready
-  // const fetchClaims = useCallback(async () => {
-  //   setLoading(true);
-  //   setError(null);
-  //   try {
-  //     const data = await apiService.getMyClaims();
-  //     setClaims(data);
-  //   } catch (err: any) {
-  //     setError(err.message || 'Failed to fetch claims');
-  //   } finally {
-  //     setLoading(false);
-  //     setRefreshing(false);
-  //   }
-  // }, []);
+  const fetchClaims = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.getMyExpenseClaims();
+      setClaims(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch claims');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-  // useEffect(() => {
-  //   fetchClaims();
-  // }, [fetchClaims]);
+  useEffect(() => {
+    fetchClaims();
+  }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
-    // fetchClaims();
-    setTimeout(() => setRefreshing(false), 800);
+    fetchClaims();
   };
 
   const filteredClaims = claims.filter((claim) => {
@@ -93,6 +94,23 @@ const ClaimsHistoryScreen: React.FC = () => {
   const handleExpand = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId(expandedId === id ? null : id);
+  };
+
+  const getLatestAdminComment = (claim: any) => {
+    if (Array.isArray(claim.approvalLogs) && claim.approvalLogs.length > 0) {
+      // Get the latest log with a comment
+      const latest = [...claim.approvalLogs].reverse().find((log) => log.comment);
+      return latest?.comment || '';
+    }
+    return '';
+  };
+
+  const getAmount = (claim: any) => {
+    if (typeof claim.totalAmount === 'number') return claim.totalAmount;
+    if (Array.isArray(claim.itemizedExpenses)) {
+      return claim.itemizedExpenses.reduce((sum: any, row: any) => sum + (parseFloat(row.amount) || 0), 0);
+    }
+    return 0;
   };
 
   return (
@@ -170,7 +188,7 @@ const ClaimsHistoryScreen: React.FC = () => {
                   <View style={styles.expandedSection}>
                     <View style={styles.expandedRow}>
                       <Text style={styles.expandedLabel}>Amount:</Text>
-                      <Text style={styles.expandedValue}>{claim.amount != null ? `$${claim.amount}` : '-'}</Text>
+                      <Text style={styles.expandedValue}>{getAmount(claim) != null ? `QAR ${getAmount(claim).toLocaleString()}` : '-'}</Text>
                     </View>
                     <View style={styles.expandedRow}>
                       <Text style={styles.expandedLabel}>Submitted At:</Text>
@@ -178,8 +196,35 @@ const ClaimsHistoryScreen: React.FC = () => {
                     </View>
                     <View style={styles.expandedRow}>
                       <Text style={styles.expandedLabel}>Admin Comment:</Text>
-                      <Text style={styles.expandedValue}>{claim.adminComment || '-'}</Text>
+                      <Text style={styles.expandedValue}>{getLatestAdminComment(claim) || '-'}</Text>
                     </View>
+                    {/* Document Link */}
+                    {Array.isArray(claim.documents) && claim.documents.length > 0 && claim.documents[0] && (
+                      <View style={styles.expandedRow}>
+                        <Text style={styles.expandedLabel}>Document:</Text>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            try {
+                              const doc = claim.documents[0];
+                              const url = `${API_BASE_URL}/documents/${doc._id}/download`;
+                              // Get JWT token from SecureStore
+                              const token = await (await import('expo-secure-store')).getItemAsync('auth_token');
+                              const fileExt = doc.originalname ? doc.originalname.split('.').pop() : 'pdf';
+                              const fileName = doc.originalname || `document.${fileExt}`;
+                              const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+                              const downloadRes = await FileSystem.downloadAsync(url, fileUri, {
+                                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                              });
+                              await Sharing.shareAsync(downloadRes.uri);
+                            } catch (err) {
+                              alert('Failed to download or open document.');
+                            }
+                          }}
+                        >
+                          <Text style={[styles.expandedValue, { color: '#1976D2', textDecorationLine: 'underline' }]}>View Document</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>

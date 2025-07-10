@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "expo-sharing": "^13.1.5",
     "html-entities": "^2.6.0"
   }
 }

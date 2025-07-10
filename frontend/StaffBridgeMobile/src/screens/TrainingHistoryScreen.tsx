@@ -4,6 +4,8 @@ import { Card, Title, Paragraph, ActivityIndicator, Chip, TextInput, HelperText,
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -181,13 +183,108 @@ const TrainingHistoryScreen: React.FC = () => {
                 {expanded && (
                   <View style={styles.expandedSection}>
                     <View style={styles.expandedRow}>
-                      <Text style={styles.expandedLabel}>Admin Comment:</Text>
-                      <Text style={styles.expandedValue}>{req.adminComment || '-'}</Text>
+                      <Text style={styles.expandedLabel}>Title:</Text>
+                      <Text style={styles.expandedValue}>{req.trainingTitle || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Hosted By:</Text>
+                      <Text style={styles.expandedValue}>{req.hostedBy || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Location:</Text>
+                      <Text style={styles.expandedValue}>{req.location || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Number of Days:</Text>
+                      <Text style={styles.expandedValue}>{req.numberOfDays || '-'}</Text>
+                    </View>
+                    {req.costBreakdown && (
+                      <>
+                        <View style={styles.expandedRow}>
+                          <Text style={styles.expandedLabel}>Training Fee:</Text>
+                          <Text style={styles.expandedValue}>{req.costBreakdown.trainingFee || '-'}</Text>
+                        </View>
+                        <View style={styles.expandedRow}>
+                          <Text style={styles.expandedLabel}>Travel Cost:</Text>
+                          <Text style={styles.expandedValue}>{req.costBreakdown.travelCost || '-'}</Text>
+                        </View>
+                        <View style={styles.expandedRow}>
+                          <Text style={styles.expandedLabel}>Hotel Cost:</Text>
+                          <Text style={styles.expandedValue}>{req.costBreakdown.hotelCost || '-'}</Text>
+                        </View>
+                        <View style={styles.expandedRow}>
+                          <Text style={styles.expandedLabel}>Meal Cost:</Text>
+                          <Text style={styles.expandedValue}>{req.costBreakdown.mealCost || '-'}</Text>
+                        </View>
+                        <View style={styles.expandedRow}>
+                          <Text style={styles.expandedLabel}>Other Cost:</Text>
+                          <Text style={styles.expandedValue}>{req.costBreakdown.otherCost || '-'}</Text>
+                        </View>
+                        <View style={styles.expandedRow}>
+                          <Text style={styles.expandedLabel}>Other Cost Desc:</Text>
+                          <Text style={styles.expandedValue}>{req.costBreakdown.otherCostDesc || '-'}</Text>
+                        </View>
+                      </>
+                    )}
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Justification:</Text>
+                      <Text style={styles.expandedValue}>{req.justification || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Expected Outcomes:</Text>
+                      <Text style={styles.expandedValue}>{req.expectedOutcomes || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Benefit to Org:</Text>
+                      <Text style={styles.expandedValue}>{req.benefitToOrg || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Cover Requirements:</Text>
+                      <Text style={styles.expandedValue}>{req.coverRequirements || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Additional Notes:</Text>
+                      <Text style={styles.expandedValue}>{req.additionalNotes || '-'}</Text>
+                    </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Status:</Text>
+                      <Text style={styles.expandedValue}>{req.status || '-'}</Text>
                     </View>
                     <View style={styles.expandedRow}>
                       <Text style={styles.expandedLabel}>Requested At:</Text>
                       <Text style={styles.expandedValue}>{formatDate(req.requestedDate)}</Text>
                     </View>
+                    <View style={styles.expandedRow}>
+                      <Text style={styles.expandedLabel}>Admin Comment:</Text>
+                      <Text style={styles.expandedValue}>{req.adminComment || '-'}</Text>
+                    </View>
+                    {/* Document Link */}
+                    {Array.isArray(req.documents) && req.documents.length > 0 && req.documents[0] && (
+                      <View style={styles.expandedRow}>
+                        <Text style={styles.expandedLabel}>Document:</Text>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            try {
+                              const doc = req.documents[0];
+                              const API_BASE_URL = 'http://10.0.2.2:5000/api';
+                              const url = `${API_BASE_URL}/documents/${doc._id}/download`;
+                              const token = await (await import('expo-secure-store')).getItemAsync('auth_token');
+                              const fileExt = doc.originalname ? doc.originalname.split('.').pop() : 'pdf';
+                              const fileName = doc.originalname || `document.${fileExt}`;
+                              const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+                              const downloadRes = await FileSystem.downloadAsync(url, fileUri, {
+                                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                              });
+                              await Sharing.shareAsync(downloadRes.uri);
+                            } catch (err) {
+                              alert('Failed to download or open document.');
+                            }
+                          }}
+                        >
+                          <Text style={[styles.expandedValue, { color: '#1976D2', textDecorationLine: 'underline' }]}>View Document</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>

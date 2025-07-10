@@ -16,6 +16,8 @@ import apiService from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { spacing, typography } from '../theme/theme';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const LEAVE_TYPES = [
   { label: 'Annual', icon: 'calendar-blank' },
@@ -31,9 +33,10 @@ const MAX_REASON_LENGTH = 300;
 const LeaveRequestScreen: React.FC = () => {
   const { theme } = useTheme();
   const navigation = useNavigation();
+  const { state: authState } = useAuth();
   const [leaveType, setLeaveType] = useState('Annual');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDateObj, setStartDateObj] = useState<Date | null>(null);
+  const [endDateObj, setEndDateObj] = useState<Date | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [reason, setReason] = useState('');
@@ -42,20 +45,17 @@ const LeaveRequestScreen: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   const calcTotalDays = () => {
-    if (!startDate || !endDate) return '';
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
-    const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (!startDateObj || !endDateObj) return '';
+    const diff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     return diff > 0 ? diff.toString() : '';
   };
 
   const validate = () => {
     const errs: { [key: string]: string } = {};
     if (!leaveType) errs.leaveType = 'Leave type is required.';
-    if (!startDate) errs.startDate = 'Start date is required.';
-    if (!endDate) errs.endDate = 'End date is required.';
-    if (startDate && endDate && endDate < startDate) errs.endDate = 'End date must be after start date.';
+    if (!startDateObj) errs.startDate = 'Start date is required.';
+    if (!endDateObj) errs.endDate = 'End date is required.';
+    if (startDateObj && endDateObj && endDateObj < startDateObj) errs.endDate = 'End date must be after start date.';
     if (!reason.trim()) errs.reason = 'Reason is required.';
     if (reason.length > MAX_REASON_LENGTH) errs.reason = 'Reason is too long.';
     setErrors(errs);
@@ -67,10 +67,11 @@ const LeaveRequestScreen: React.FC = () => {
     setSubmitting(true);
     try {
       await apiService.requestLeave({
-        type: leaveType,
-        startDate: startDate,
-        endDate: endDate,
+        leaveType: leaveType,
+        startDate: startDateObj ? startDateObj.toISOString().split('T')[0] : '',
+        endDate: endDateObj ? endDateObj.toISOString().split('T')[0] : '',
         reason: reason.trim(),
+        status: 'Pending',
       });
       setSuccess(true);
       setTimeout(() => {
@@ -132,23 +133,47 @@ const LeaveRequestScreen: React.FC = () => {
           </View>
           <View style={{ flexDirection: 'row', marginBottom: spacing.sm }}>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <TextInput
+              <TouchableOpacity
                 style={[styles.input, errors.startDate ? styles.inputError : undefined, theme.colors.disabled ? { backgroundColor: theme.colors.disabled } : undefined]}
-                value={typeof startDate === 'string' ? startDate : ''}
-                onChangeText={text => setStartDate(text)}
-                placeholder="Start Date (YYYY-MM-DD)"
-                placeholderTextColor={theme.colors.placeholder}
-              />
+                onPress={() => setShowStartPicker(true)}
+              >
+                <Text style={{ color: startDateObj ? theme.colors.text : theme.colors.placeholder }}>
+                  {startDateObj ? startDateObj.toISOString().split('T')[0] : 'Start Date (YYYY-MM-DD)'}
+                </Text>
+              </TouchableOpacity>
+              {showStartPicker && (
+                <DateTimePicker
+                  value={startDateObj || new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowStartPicker(false);
+                    if (date) setStartDateObj(date);
+                  }}
+                />
+              )}
               {errors.startDate && <Text style={styles.errorText}>{errors.startDate}</Text>}
             </View>
             <View style={{ flex: 1, marginLeft: 8 }}>
-              <TextInput
+              <TouchableOpacity
                 style={[styles.input, errors.endDate ? styles.inputError : undefined, theme.colors.disabled ? { backgroundColor: theme.colors.disabled } : undefined]}
-                value={typeof endDate === 'string' ? endDate : ''}
-                onChangeText={text => setEndDate(text)}
-                placeholder="End Date (YYYY-MM-DD)"
-                placeholderTextColor={theme.colors.placeholder}
-              />
+                onPress={() => setShowEndPicker(true)}
+              >
+                <Text style={{ color: endDateObj ? theme.colors.text : theme.colors.placeholder }}>
+                  {endDateObj ? endDateObj.toISOString().split('T')[0] : 'End Date (YYYY-MM-DD)'}
+                </Text>
+              </TouchableOpacity>
+              {showEndPicker && (
+                <DateTimePicker
+                  value={endDateObj || new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowEndPicker(false);
+                    if (date) setEndDateObj(date);
+                  }}
+                />
+              )}
               {errors.endDate && <Text style={styles.errorText}>{errors.endDate}</Text>}
             </View>
           </View>

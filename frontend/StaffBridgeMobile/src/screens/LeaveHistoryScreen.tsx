@@ -1,43 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Card, Title, Paragraph, ActivityIndicator, Chip, TextInput, HelperText } from 'react-native-paper';
 import { useTheme } from '../context/ThemeContext';
-// import apiService from '../services/api'; // Uncomment and use when backend is ready
+import apiService from '../services/api';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-// Mock data for demonstration. Replace with API data.
-const mockLeaves = [
-  {
-    _id: '1',
-    title: 'Annual Leave',
-    status: 'Approved',
-    leaveType: 'Annual',
-    startDate: '2025-07-10',
-    endDate: '2025-07-15',
-    adminComment: 'Enjoy your vacation!',
-  },
-  {
-    _id: '2',
-    title: 'Sick Leave',
-    status: 'Pending',
-    leaveType: 'Sick',
-    startDate: '2025-07-20',
-    endDate: '2025-07-22',
-    adminComment: '',
-  },
-  {
-    _id: '3',
-    title: 'Emergency Leave',
-    status: 'Rejected',
-    leaveType: 'Emergency',
-    startDate: '2025-06-28',
-    endDate: '2025-06-29',
-    adminComment: 'Insufficient documentation.',
-  },
-];
 
 const STATUS_OPTIONS = [
   { label: 'All Statuses', value: '' },
@@ -53,42 +24,43 @@ const formatDate = (dateString: string) => {
 };
 
 const LeaveHistoryScreen: React.FC = () => {
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(false); // Set to true if fetching from API
   const [refreshing, setRefreshing] = useState(false);
-  const [leaves, setLeaves] = useState<any[]>(mockLeaves); // Replace with API data
+  const [leaves, setLeaves] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { theme } = useTheme();
 
-  // Uncomment and use when backend is ready
-  // const fetchLeaves = useCallback(async () => {
-  //   setLoading(true);
-  //   setError(null);
-  //   try {
-  //     const data = await apiService.getMyLeaves();
-  //     setLeaves(data);
-  //   } catch (err: any) {
-  //     setError(err.message || 'Failed to fetch leaves');
-  //   } finally {
-  //     setLoading(false);
-  //     setRefreshing(false);
-  //   }
-  // }, []);
+  const fetchLeaves = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.getLeaveHistory();
+      console.log('Fetched leaves:', data); // Debug log
+      setLeaves(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.log('Error fetching leaves:', err); // Log error
+      setError(err.message || 'Failed to fetch leaves');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-  // useEffect(() => {
-  //   fetchLeaves();
-  // }, [fetchLeaves]);
+  useEffect(() => {
+    fetchLeaves();
+  }, [fetchLeaves]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    // fetchLeaves();
-    setTimeout(() => setRefreshing(false), 800);
+    fetchLeaves();
   };
 
   const filteredLeaves = leaves.filter((leave) => {
-    const matchesTitle = leave.title?.toLowerCase().includes(search.toLowerCase());
+    const matchesTitle = leave.leaveType?.toLowerCase().includes(search.toLowerCase()) || leave.reason?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = status ? (leave.status?.toLowerCase() === status.toLowerCase()) : true;
     return matchesTitle && matchesStatus;
   });
@@ -136,7 +108,7 @@ const LeaveHistoryScreen: React.FC = () => {
           </Card.Content>
         </Card>
         <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, { flex: 3 }]}>Title</Text>
+          <Text style={[styles.headerCell, { flex: 3 }]}>Leave Type</Text>
           <Text style={[styles.headerCell, { flex: 1 }]}>Status</Text>
         </View>
         {loading ? (
@@ -157,9 +129,9 @@ const LeaveHistoryScreen: React.FC = () => {
                   activeOpacity={0.7}
                   onPress={() => handleExpand(leave._id || idx.toString())}
                   accessibilityRole="button"
-                  accessibilityLabel={`Expand details for ${leave.title}`}
+                  accessibilityLabel={`Expand details for ${leave.leaveType}`}
                 >
-                  <Text style={[styles.cell, { flex: 3 }]} numberOfLines={2}>{leave.title || '-'}</Text>
+                  <Text style={[styles.cell, { flex: 3 }]} numberOfLines={2}>{leave.leaveType || '-'}</Text>
                   <View style={[styles.cell, { flex: 1 }]}> 
                     <Chip
                       style={{ backgroundColor: leave.status === 'Approved' ? '#B9F6CA' : leave.status === 'Rejected' ? '#FF8A80' : '#FFF9C4', minWidth: 70, justifyContent: 'center' }}

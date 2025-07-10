@@ -8,6 +8,7 @@ import Modal from 'react-native-modal';
 import { View, TouchableOpacity, Text, StyleSheet, Pressable } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
@@ -33,6 +34,8 @@ import DrawerContent from '../components/DrawerContent';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import AttendanceHistoryScreen from '../screens/AttendanceHistoryScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
+import TrainingRequestScreen from '../screens/TrainingRequestScreen';
+import PayslipScreen from '../screens/PayslipScreen';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -53,6 +56,7 @@ export type SubmenuStackParamList = {
   TrainingHistory: undefined;
   InventoryRequest: undefined;
   CurrentInventory: undefined;
+  Payslip: undefined;
   
   // Tasks submenu
   AssignedTasks: undefined;
@@ -72,23 +76,64 @@ const Stack = createStackNavigator<SubmenuStackParamList>();
 
 const SubmenuStackNavigator: React.FC = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator 
+      screenOptions={{ headerShown: true }}
+    >
       {/* Requests submenu */}
       <Stack.Screen name="AttendanceHistory" component={AttendanceHistoryScreen} />
       <Stack.Screen name="LeaveRequest" component={LeaveRequestScreen} />
-      <Stack.Screen name="LeaveHistory" component={LeaveHistoryScreen} />
+      <Stack.Screen 
+        name="LeaveHistory" 
+        component={LeaveHistoryScreen} 
+        options={({ navigation, route }) => ({
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('LeaveRequest' as never)} style={{ marginRight: 12 }} accessibilityLabel="Add new leave request">
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       <Stack.Screen name="ExpenseClaim" component={ExpenseClaimScreen} />
-      <Stack.Screen name="ClaimsHistory" component={ClaimsHistoryScreen} />
-      <Stack.Screen name="TrainingRequest" component={TrainingScreen} />
-      <Stack.Screen name="TrainingHistory" component={TrainingHistoryScreen} />
+      <Stack.Screen 
+        name="ClaimsHistory" 
+        component={ClaimsHistoryScreen} 
+        options={({ navigation, route }) => ({
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('ExpenseClaim' as never)} style={{ marginRight: 12 }} accessibilityLabel="Add new expense claim">
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen name="TrainingRequest" component={TrainingRequestScreen} />
+      <Stack.Screen 
+        name="TrainingHistory" 
+        component={TrainingHistoryScreen} 
+        options={({ navigation, route }) => ({
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('TrainingRequest' as never)} style={{ marginRight: 12 }} accessibilityLabel="Add new training request">
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       <Stack.Screen name="InventoryRequest" component={InventoryRequestScreen} />
-      <Stack.Screen name="CurrentInventory" component={CurrentInventoryScreen} />
-      
+      <Stack.Screen 
+        name="CurrentInventory" 
+        component={CurrentInventoryScreen} 
+        options={({ navigation, route }) => ({
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('InventoryRequest' as never)} style={{ marginRight: 12 }} accessibilityLabel="Add new inventory request">
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen name="Payslip" component={PayslipScreen} />
       {/* Tasks submenu */}
       <Stack.Screen name="AssignedTasks" component={AssignedTasksScreen} />
       <Stack.Screen name="PerformanceEvaluation" component={PerformanceScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
-      
       {/* More submenu */}
       <Stack.Screen name="StaffDirectory" component={StaffDirectoryScreen} />
       <Stack.Screen name="BulletinBoard" component={BulletinsScreen} />
@@ -117,14 +162,15 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
     if (modal === 'Requests') {
       items = [
         { label: 'Attendance History', icon: 'history', tab: 'Requests', screen: 'AttendanceHistory' },
-        { label: 'Leave Request', icon: 'calendar-plus', tab: 'Requests', screen: 'LeaveRequest' },
+        // { label: 'Leave Request', icon: 'calendar-plus', tab: 'Requests', screen: 'LeaveRequest' },
         { label: 'Leave History', icon: 'calendar-clock', tab: 'Requests', screen: 'LeaveHistory' },
-        { label: 'Expense Claim', icon: 'cash-multiple', tab: 'Requests', screen: 'ExpenseClaim' },
+        // { label: 'Expense Claim', icon: 'cash-multiple', tab: 'Requests', screen: 'ExpenseClaim' },
         { label: 'Claims History', icon: 'file-document-multiple-outline', tab: 'Requests', screen: 'ClaimsHistory' },
-        { label: 'Training Request', icon: 'school', tab: 'Requests', screen: 'TrainingRequest' },
+        // { label: 'Training Request', icon: 'school', tab: 'Requests', screen: 'TrainingRequest' },
         { label: 'Training History', icon: 'school-outline', tab: 'Requests', screen: 'TrainingHistory' },
-        { label: 'Inventory Request', icon: 'cube-send', tab: 'Requests', screen: 'InventoryRequest' },
+        // { label: 'Inventory Request', icon: 'cube-send', tab: 'Requests', screen: 'InventoryRequest' },
         { label: 'Current Inventory', icon: 'cube-outline', tab: 'Requests', screen: 'CurrentInventory' },
+        { label: 'Payslip', icon: 'file-document-outline', tab: 'Requests', screen: 'Payslip' },
       ];
     } else if (modal === 'Tasks') {
       items = [
@@ -234,9 +280,19 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 
 const TabNavigator: React.FC = () => {
   const theme = useTheme();
+  const navigation = useNavigation();
 
   return (
     <Tab.Navigator
+      screenOptions={{
+        headerShown: true,
+        headerRight: () => (
+          // @ts-ignore
+          <TouchableOpacity style={{ marginRight: 16 }} onPress={() => navigation.navigate('More', { screen: 'Notifications' })}>
+            <Icon name="bell-outline" size={26} color={theme.colors.primary} />
+          </TouchableOpacity>
+        ),
+      }}
       tabBar={props => <CustomTabBar {...props} />}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />

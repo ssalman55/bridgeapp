@@ -248,17 +248,19 @@ const DashboardScreen: React.FC = () => {
             })}
           </Text>
         </View>
-        <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
-          <Text style={styles.avatarText}>
-            {`${state.user?.firstName?.[0] || ''}${state.user?.lastName?.[0] || ''}`}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
+            <Text style={styles.avatarText}>
+              {`${state.user?.firstName?.[0] || ''}${state.user?.lastName?.[0] || ''}`}
+            </Text>
+          </View>
         </View>
       </View>
 
       {dashboardData && (
         <>
           {/* Attendance Card */}
-          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}> 
+          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}>
             <Card.Content>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                 <Icon name="calendar-check" size={22} color={theme.colors.primary} style={{ marginRight: 8 }} />
@@ -303,7 +305,7 @@ const DashboardScreen: React.FC = () => {
           </Card>
 
           {/* Peer Recognitions */}
-          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}> 
+          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}>
             <Card.Content>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                 <Icon name="account-star-outline" size={22} color={theme.colors.primary} style={{ marginRight: 8 }} />
@@ -335,10 +337,10 @@ const DashboardScreen: React.FC = () => {
           </Card>
 
           {/* Quick Actions */}
-          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}> 
+          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}>
             <Card.Content>
               <Text style={[typography.h3, { color: theme.colors.primary, marginBottom: 8 }]}>Quick Actions</Text>
-              <View style={[styles.quickActions, { flexWrap: 'wrap', alignItems: 'flex-start' }]}> 
+              <View style={[styles.quickActions, { flexWrap: 'wrap', alignItems: 'flex-start' }]}>
                 <TouchableOpacity onPress={() => navigation.navigate('TrainingRequest' as never)} style={styles.quickActionButtonModern}>
                   <Icon name="school" size={28} color={theme.colors.primary} />
                   <Text style={styles.quickActionLabel}>Training Request</Text>

@@ -141,13 +141,16 @@ class ApiService {
 
   // Leave endpoints
   async requestLeave(data: {
-    type: string;
+    leaveType: string;
     startDate: string;
     endDate: string;
     reason: string;
     documents?: string[];
+    user?: string;
+    organization?: string;
+    status?: string;
   }) {
-    const response = await this.api.post('/leave/request', data);
+    const response = await this.api.post('/leave', data);
     return response.data;
   }
 
@@ -209,9 +212,7 @@ class ApiService {
   }
 
   async downloadDocument(id: string) {
-    const response = await this.api.get(`/documents/${id}/download`, {
-      responseType: 'blob',
-    });
+    const response = await this.api.get(`/documents/${id}/download`);
     return response.data;
   }
 
@@ -312,9 +313,24 @@ class ApiService {
     return response.data;
   }
 
+  async createExpenseClaim(data: any) {
+    const response = await this.api.post('/expense-claims', data);
+    return response.data;
+  }
+
   // Inventory endpoints
   async getMyInventory() {
     const response = await this.api.get('/inventory/my');
+    return response.data;
+  }
+
+  async submitInventoryRequest(data: any) {
+    const response = await this.api.post('/inventory/requests', data);
+    return response.data;
+  }
+
+  async getInventoryItemNames() {
+    const response = await this.api.get('/inventory/item-names');
     return response.data;
   }
 

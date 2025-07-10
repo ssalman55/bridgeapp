@@ -1,5 +1,6 @@
 export interface User {
   id: string;
+  _id?: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -13,6 +14,7 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  organization?: string;
 }
 
 export interface AuthState {
