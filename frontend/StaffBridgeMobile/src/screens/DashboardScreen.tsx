@@ -341,19 +341,19 @@ const DashboardScreen: React.FC = () => {
             <Card.Content>
               <Text style={[typography.h3, { color: theme.colors.primary, marginBottom: 8 }]}>Quick Actions</Text>
               <View style={[styles.quickActions, { flexWrap: 'wrap', alignItems: 'flex-start' }]}>
-                <TouchableOpacity onPress={() => navigation.navigate('TrainingRequest' as never)} style={styles.quickActionButtonModern}>
+                <TouchableOpacity onPress={() => navigation.navigate('Requests', { screen: 'TrainingRequest' })} style={styles.quickActionButtonModern}>
                   <Icon name="school" size={28} color={theme.colors.primary} />
                   <Text style={styles.quickActionLabel}>Training Request</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('InventoryRequest' as never)} style={styles.quickActionButtonModern}>
+                <TouchableOpacity onPress={() => navigation.navigate('Requests', { screen: 'InventoryRequest' })} style={styles.quickActionButtonModern}>
                   <Icon name="cube-send" size={28} color={theme.colors.warning} />
                   <Text style={styles.quickActionLabel}>Inventory Request</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('Payroll' as never)} style={styles.quickActionButtonModern}>
+                <TouchableOpacity onPress={() => navigation.navigate('Requests', { screen: 'Payslip' })} style={styles.quickActionButtonModern}>
                   <Icon name="file-document" size={28} color={theme.colors.info} />
                   <Text style={styles.quickActionLabel}>Payslip</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('ExpenseClaim' as never)} style={styles.quickActionButtonModern}>
+                <TouchableOpacity onPress={() => navigation.navigate('Requests', { screen: 'ExpenseClaim' })} style={styles.quickActionButtonModern}>
                   <Icon name="cash-multiple" size={28} color={theme.colors.accent} />
                   <Text style={styles.quickActionLabel}>Expense Claim</Text>
                 </TouchableOpacity>

@@ -5,6 +5,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
+import { useNavigation } from '@react-navigation/native';
 
 const InventoryRequestScreen: React.FC = () => {
   const { state } = useAuth();
@@ -21,6 +22,7 @@ const InventoryRequestScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [itemOptions, setItemOptions] = useState<any[]>([]);
+  const navigation = useNavigation();
 
   useEffect(() => {
     apiService.getInventoryItemNames().then((data) => {
@@ -70,7 +72,10 @@ const InventoryRequestScreen: React.FC = () => {
       };
       await apiService.submitInventoryRequest(payload);
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 1500);
+      setTimeout(() => {
+        setSuccess(false);
+        (navigation as any).navigate('Requests', { screen: 'CurrentInventory', params: { refresh: true } });
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit inventory request.');
     } finally {

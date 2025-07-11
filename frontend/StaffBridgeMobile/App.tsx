@@ -11,6 +11,7 @@ import { NotificationProvider } from './src/context/NotificationContext';
 import RootNavigator from './src/navigation/RootNavigator';
 // @ts-ignore
 import { useTheme } from './src/context/ThemeContext';
+import { navigationRef } from './src/navigation/navigationRef';
 
 function MainApp() {
   const { theme } = useTheme();
@@ -18,7 +19,7 @@ function MainApp() {
     <PaperProvider theme={theme as any}>
       <NotificationProvider>
         <AuthProvider>
-          <NavigationContainer theme={theme as any}>
+          <NavigationContainer theme={theme as any} ref={navigationRef}>
             <RootNavigator />
           </NavigationContainer>
         </AuthProvider>

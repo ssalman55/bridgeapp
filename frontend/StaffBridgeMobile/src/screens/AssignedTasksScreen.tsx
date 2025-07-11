@@ -48,7 +48,13 @@ const AssignedTasksScreen: React.FC = () => {
     setError(null);
     try {
       const data = await apiService.getMyTasks();
-      setTasks(Array.isArray(data) ? data : []);
+      // Sort tasks by creation date (most recent first)
+      const sortedTasks = Array.isArray(data) ? data.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime(); // Most recent first
+      }) : [];
+      setTasks(sortedTasks);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch tasks');
     } finally {

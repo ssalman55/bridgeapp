@@ -4,6 +4,7 @@ import { Card, Title, Button, ActivityIndicator } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
+import { useNavigation } from '@react-navigation/native';
 
 const TrainingRequestScreen: React.FC = () => {
   const { state } = useAuth();
@@ -33,6 +34,14 @@ const TrainingRequestScreen: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [currency, setCurrency] = useState('QAR');
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    apiService.getSystemSettings().then(settings => {
+      if (settings && settings.currency) setCurrency(settings.currency);
+    });
+  }, []);
 
   useEffect(() => {
     if (showDocModal) {
@@ -99,7 +108,10 @@ const TrainingRequestScreen: React.FC = () => {
       };
       await apiService.submitTrainingRequest(payload);
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 1500);
+      setTimeout(() => {
+        setSuccess(false);
+        (navigation as any).navigate('Requests', { screen: 'TrainingHistory', params: { refresh: true } });
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit training request.');
     } finally {
@@ -122,15 +134,15 @@ const TrainingRequestScreen: React.FC = () => {
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="Number of Days *" value={form.numberOfDays} keyboardType="numeric" onChangeText={v => handleChange('numberOfDays', v)} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Training/Registration Fee" value={form.trainingFee} keyboardType="numeric" onChangeText={v => handleChange('trainingFee', v)} />
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Travel Cost" value={form.travelCost} keyboardType="numeric" onChangeText={v => handleChange('travelCost', v)} />
+            <TextInput style={[styles.input, { flex: 1 }]} placeholder={`Training/Registration Fee (${currency})`} value={form.trainingFee} keyboardType="numeric" onChangeText={v => handleChange('trainingFee', v)} />
+            <TextInput style={[styles.input, { flex: 1 }]} placeholder={`Travel Cost (${currency})`} value={form.travelCost} keyboardType="numeric" onChangeText={v => handleChange('travelCost', v)} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Hotel/Accommodation Cost" value={form.hotelCost} keyboardType="numeric" onChangeText={v => handleChange('hotelCost', v)} />
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Meal/Per Diem Cost" value={form.mealCost} keyboardType="numeric" onChangeText={v => handleChange('mealCost', v)} />
+            <TextInput style={[styles.input, { flex: 1 }]} placeholder={`Hotel/Accommodation Cost (${currency})`} value={form.hotelCost} keyboardType="numeric" onChangeText={v => handleChange('hotelCost', v)} />
+            <TextInput style={[styles.input, { flex: 1 }]} placeholder={`Meal/Per Diem Cost (${currency})`} value={form.mealCost} keyboardType="numeric" onChangeText={v => handleChange('mealCost', v)} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Other Costs" value={form.otherCost} keyboardType="numeric" onChangeText={v => handleChange('otherCost', v)} />
+            <TextInput style={[styles.input, { flex: 1 }]} placeholder={`Other Costs (${currency})`} value={form.otherCost} keyboardType="numeric" onChangeText={v => handleChange('otherCost', v)} />
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="Describe other costs" value={form.otherCostDesc} onChangeText={v => handleChange('otherCostDesc', v)} />
           </View>
           <TextInput style={[styles.input, { minHeight: 60 }]} placeholder="Training Justification *" value={form.justification} onChangeText={v => handleChange('justification', v)} multiline />

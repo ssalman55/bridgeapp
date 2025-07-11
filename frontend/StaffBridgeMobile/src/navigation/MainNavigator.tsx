@@ -5,10 +5,13 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Modal from 'react-native-modal';
-import { View, TouchableOpacity, Text, StyleSheet, Pressable } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { useNotifications } from '../context/NotificationContext';
+import { Button } from 'react-native-paper';
+import { navigationRef } from './navigationRef';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import AttendanceScreen from '../screens/AttendanceScreen';
@@ -281,26 +284,57 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 const TabNavigator: React.FC = () => {
   const theme = useTheme();
   const navigation = useNavigation();
+  const { unreadCount, notifications, markAllAsRead, refreshNotifications } = useNotifications();
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerRight: () => (
-          // @ts-ignore
-          <TouchableOpacity style={{ marginRight: 16 }} onPress={() => navigation.navigate('More', { screen: 'Notifications' })}>
-            <Icon name="bell-outline" size={26} color={theme.colors.primary} />
-          </TouchableOpacity>
-        ),
-      }}
-      tabBar={props => <CustomTabBar {...props} />}
-    >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Requests" component={SubmenuStackNavigator} />
-      <Tab.Screen name="Tasks" component={SubmenuStackNavigator} />
-      <Tab.Screen name="Calendar" component={CalendarScreen} />
-      <Tab.Screen name="More" component={SubmenuStackNavigator} />
-    </Tab.Navigator>
+    <>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: true,
+          headerRight: () => (
+            // @ts-ignore
+            <TouchableOpacity style={{ marginRight: 16 }} onPress={() => setNotifModalVisible(true)}>
+              <Icon name="bell-outline" size={26} color={theme.colors.primary} />
+              {unreadCount > 0 && (
+                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: 'red', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ),
+        }}
+        tabBar={props => <CustomTabBar {...props} />}
+      >
+        <Tab.Screen name="Dashboard" component={DashboardScreen} />
+        <Tab.Screen name="Requests" component={SubmenuStackNavigator} />
+        <Tab.Screen name="Tasks" component={SubmenuStackNavigator} />
+        <Tab.Screen name="Calendar" component={CalendarScreen} />
+        <Tab.Screen name="More" component={SubmenuStackNavigator} />
+      </Tab.Navigator>
+      <Modal isVisible={notifModalVisible} onBackdropPress={() => setNotifModalVisible(false)} style={{ margin: 0 }}>
+        <View style={{ flex: 1, backgroundColor: '#fff', padding: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18 }}>Notifications</Text>
+            <TouchableOpacity onPress={async () => { await markAllAsRead(); await refreshNotifications(); }}>
+              <Text style={{ color: '#1976D2', fontWeight: 'bold' }}>Mark all as read</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView>
+            {notifications.slice(0, 10).map((notif) => (
+              <TouchableOpacity key={notif._id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderColor: '#eee', backgroundColor: notif.read ? '#fff' : '#E3F2FD' }} onPress={() => {
+                setNotifModalVisible(false);
+                (navigationRef as any).navigate('More', { screen: 'Notifications' });
+              }}>
+                <Text style={{ fontWeight: notif.read ? 'normal' : 'bold', color: '#222' }}>{notif.message}</Text>
+                <Text style={{ color: '#888', fontSize: 12 }}>{new Date(notif.timestamp).toLocaleString()}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <Button mode="outlined" style={{ marginTop: 16 }} onPress={() => { setNotifModalVisible(false); (navigationRef as any).navigate('More', { screen: 'Notifications' }); }}>View All</Button>
+        </View>
+      </Modal>
+    </>
   );
 };
 

@@ -171,7 +171,7 @@ class ApiService {
 
   // Payroll endpoints
   async getPayslips(params?: { month?: string; year?: string }) {
-    const response = await this.api.get('/payroll/payslips', { params });
+    const response = await this.api.get('/payroll/my', { params });
     return response.data;
   }
 
@@ -221,6 +221,11 @@ class ApiService {
     return response.data;
   }
 
+  async getDocumentDownloadUrl(id: string) {
+    const response = await this.api.get(`/documents/${id}/download`);
+    return response.data.url;
+  }
+
   // Training endpoints
   async getTrainingRequests(params?: { status?: string }) {
     const response = await this.api.get('/training-requests', { params });
@@ -264,6 +269,11 @@ class ApiService {
     return response.data;
   }
 
+  async updatePerformanceEvaluation(id: string, data: any) {
+    const response = await this.api.put(`/performance-evaluations/${id}`, data);
+    return response.data;
+  }
+
   // Notification endpoints
   async getNotifications(params?: { page?: number; limit?: number }) {
     const response = await this.api.get('/notifications', { params });
@@ -271,12 +281,12 @@ class ApiService {
   }
 
   async markNotificationAsRead(id: string) {
-    const response = await this.api.put(`/notifications/${id}/read`);
+    const response = await this.api.post(`/notifications/read/${id}`);
     return response.data;
   }
 
   async markAllNotificationsAsRead() {
-    const response = await this.api.put('/notifications/read-all');
+    const response = await this.api.post('/notifications/read-all');
     return response.data;
   }
 
@@ -354,6 +364,11 @@ class ApiService {
   // Staff Directory endpoint
   async getStaffDirectory() {
     const response = await this.api.get('/users');
+    return response.data;
+  }
+
+  async getSystemSettings() {
+    const response = await this.api.get('/settings');
     return response.data;
   }
 }

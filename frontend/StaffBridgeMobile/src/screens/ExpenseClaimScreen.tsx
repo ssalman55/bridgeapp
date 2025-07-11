@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 const CATEGORY_OPTIONS = [
   'Travel',
@@ -31,12 +32,14 @@ const CURRENCY_OPTIONS = ['USD', 'QAR', 'EUR', 'GBP'];
 const ExpenseClaimScreen: React.FC = () => {
   const { state } = useAuth();
   const { theme } = useTheme();
+  const navigation = useNavigation();
+  const [currency, setCurrency] = useState('QAR');
   const [title, setTitle] = useState('');
   const [expenseDate, setExpenseDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [category, setCategory] = useState('');
   const [itemizedExpenses, setItemizedExpenses] = useState([
-    { description: '', amount: '', currency: 'USD', notes: '' },
+    { description: '', amount: '', currency: 'QAR', notes: '' },
   ]);
   const [documents, setDocuments] = useState<any[]>([]); // { _id, title, fileUrl }
   const [showDocModal, setShowDocModal] = useState(false);
@@ -50,6 +53,15 @@ const ExpenseClaimScreen: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   const totalAmount = itemizedExpenses.reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0);
+
+  useEffect(() => {
+    apiService.getSystemSettings().then(settings => {
+      if (settings && settings.currency) {
+        setCurrency(settings.currency);
+        setItemizedExpenses(expenses => expenses.map(row => ({ ...row, currency: settings.currency })));
+      }
+    });
+  }, []);
 
   // Fetch user documents when modal opens
   useEffect(() => {
@@ -68,7 +80,7 @@ const ExpenseClaimScreen: React.FC = () => {
   }, [showDocModal]);
 
   const handleAddRow = () => {
-    setItemizedExpenses([...itemizedExpenses, { description: '', amount: '', currency: 'USD', notes: '' }]);
+    setItemizedExpenses([...itemizedExpenses, { description: '', amount: '', currency, notes: '' }]);
   };
 
   const handleRemoveRow = (idx: number) => {
@@ -124,8 +136,8 @@ const ExpenseClaimScreen: React.FC = () => {
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
-        // Optionally reset form or navigate
-      }, 1500);
+        (navigation as any).navigate('Requests', { screen: 'ClaimsHistory', params: { refresh: true } });
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit claim.');
     } finally {
@@ -184,19 +196,13 @@ const ExpenseClaimScreen: React.FC = () => {
               />
               <TextInput
                 style={[styles.input, { flex: 1 }]}
-                placeholder="Amount"
+                placeholder={`Amount (${currency})`}
                 keyboardType="numeric"
                 value={row.amount}
                 onChangeText={val => handleItemChange(idx, 'amount', val)}
               />
-              <View style={[styles.input, { flex: 1 }]}> 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {CURRENCY_OPTIONS.map(opt => (
-                    <TouchableOpacity key={opt} onPress={() => handleItemChange(idx, 'currency', opt)} style={[styles.chip, row.currency === opt && styles.chipSelected]}>
-                      <Text style={{ color: row.currency === opt ? '#fff' : theme.colors.text }}>{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+              <View style={{ flex: 0.7, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>{currency}</Text>
               </View>
               <TextInput
                 style={[styles.input, { flex: 2 }]}
@@ -214,7 +220,7 @@ const ExpenseClaimScreen: React.FC = () => {
             <Text style={{ color: theme.colors.primary, marginLeft: 4 }}>Add Row</Text>
           </TouchableOpacity>
           <Text style={styles.sectionTitle}>Total Amount</Text>
-          <TextInput style={styles.input} value={totalAmount.toString()} editable={false} />
+          <Text>{currency} {totalAmount.toLocaleString()}</Text>
           <Text style={styles.sectionTitle}>Attach Documents</Text>
           <TouchableOpacity style={styles.attachBtn} onPress={() => setShowDocModal(true)}>
             <Icon name="paperclip" size={20} color={theme.colors.primary} />

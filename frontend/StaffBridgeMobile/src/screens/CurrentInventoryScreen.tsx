@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Card, Title, Paragraph, ActivityIndicator, Chip, TextInput, HelperText } from 'react-native-paper';
 import { useTheme } from '../context/ThemeContext';
+import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import apiService from '../services/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -29,6 +30,8 @@ const CurrentInventoryScreen: React.FC = () => {
   const [status, setStatus] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { theme } = useTheme();
+  const route = useRoute();
+  const navigation = useNavigation();
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -47,6 +50,17 @@ const CurrentInventoryScreen: React.FC = () => {
   useEffect(() => {
     fetchInventory();
   }, [fetchInventory]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // If navigated with refresh param, reload and clear param
+      if ((route as any).params?.refresh) {
+        fetchInventory();
+        // Clear the param so it doesn't keep refreshing
+        (navigation as any).setParams({ refresh: undefined });
+      }
+    }, [route, fetchInventory])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);

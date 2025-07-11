@@ -21,7 +21,10 @@ const PayslipScreen: React.FC = () => {
       setError(null);
       try {
         const data = await apiService.getPayslips();
-        setPayslips(Array.isArray(data) ? data : []);
+        const sorted = Array.isArray(data)
+          ? data.slice().sort((a, b) => (b.payPeriod || '').localeCompare(a.payPeriod || ''))
+          : [];
+        setPayslips(sorted);
       } catch (err: any) {
         setError(err.message || 'Failed to fetch payslips');
       } finally {
@@ -41,7 +44,7 @@ const PayslipScreen: React.FC = () => {
     }
   };
 
-  const generatePayslipHtml = (p, user) => {
+  const generatePayslipHtml = (p: any, user: any) => {
     // You can further style this HTML as needed
     return `
       <html>
@@ -118,19 +121,7 @@ const PayslipScreen: React.FC = () => {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ padding: 16 }}>
-      <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.title}>My Payroll</Title>
-          <Text style={styles.subtitle}>View your salary history, payment status, and download payslips.</Text>
-        </Card.Content>
-      </Card>
-      <View style={styles.tableHeader}>
-        <Text style={[styles.headerCell, { flex: 2 }]}>Pay Period</Text>
-        <Text style={[styles.headerCell, { flex: 2 }]}>Gross</Text>
-        <Text style={[styles.headerCell, { flex: 2 }]}>Net</Text>
-        <Text style={[styles.headerCell, { flex: 1 }]}>Status</Text>
-        <Text style={[styles.headerCell, { flex: 2 }]}>Actions</Text>
-      </View>
+      <Text style={styles.sectionTitle}>My Payslips</Text>
       {loading ? (
         <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
       ) : error ? (
@@ -141,23 +132,30 @@ const PayslipScreen: React.FC = () => {
         </Text>
       ) : (
         payslips.map((p, idx) => (
-          <View key={p._id || idx} style={styles.tableRow}>
-            <Text style={[styles.cell, { flex: 2 }]}>{p.payPeriod || '-'}</Text>
-            <Text style={[styles.cell, { flex: 2 }]}>{p.grossSalary != null ? `€${Number(p.grossSalary).toLocaleString()}` : '-'}</Text>
-            <Text style={[styles.cell, { flex: 2 }]}>{p.netSalary != null ? `€${Number(p.netSalary).toLocaleString()}` : '-'}</Text>
-            <View style={[styles.cell, { flex: 1 }]}> 
-              <Chip
-                style={{ backgroundColor: p.paymentStatus === 'Paid' ? '#B9F6CA' : '#FFF9C4', minWidth: 70, justifyContent: 'center' }}
-                textStyle={{ color: p.paymentStatus === 'Paid' ? '#388E3C' : '#8D6E63', fontWeight: 'bold', textAlign: 'center' }}
-              >
-                {typeof p.paymentStatus === 'string' ? p.paymentStatus : '-'}
-              </Chip>
+          <View key={p._id || idx} style={styles.card}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={styles.payPeriodLabel}>Pay Period</Text>
+              <Text style={styles.payPeriod}>{p.payPeriod || '-'}</Text>
             </View>
-            <View style={[styles.cell, { flex: 2 }]}> 
-              <TouchableOpacity style={styles.payslipBtn} onPress={() => handleDownloadPayslip(p)}>
-                <Text style={styles.payslipBtnText}>Payslip</Text>
-              </TouchableOpacity>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={styles.label}>Gross Salary</Text>
+              <Text style={styles.value}>{p.grossSalary != null ? `€${Number(p.grossSalary).toLocaleString()}` : '-'}</Text>
             </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={styles.label}>Net Salary</Text>
+              <Text style={styles.value}>{p.netSalary != null ? `€${Number(p.netSalary).toLocaleString()}` : '-'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={styles.label}>Status</Text>
+              <View style={[styles.badge, p.paymentStatus === 'Paid' ? styles.badgePaid : p.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed]}>
+                <Text style={[styles.badgeText, p.paymentStatus === 'Paid' ? styles.badgeTextPaid : p.paymentStatus === 'Pending' ? styles.badgeTextPending : styles.badgeTextFailed]}>
+                  {typeof p.paymentStatus === 'string' ? p.paymentStatus : '-'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.payslipBtn} onPress={() => handleDownloadPayslip(p)}>
+              <Text style={styles.payslipBtnText}>📄 View Payslip</Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
@@ -166,15 +164,22 @@ const PayslipScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 18, padding: 16, marginBottom: 24 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-  subtitle: { fontSize: 15, color: '#888', marginBottom: 8 },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f5f5f5', paddingVertical: 8, paddingHorizontal: 12, borderTopWidth: 1, borderColor: '#eee' },
-  headerCell: { fontWeight: 'bold', color: '#333', fontSize: 14 },
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: '#f0f0f0', backgroundColor: '#fff' },
-  cell: { fontSize: 15, color: '#222', marginRight: 4 },
-  payslipBtn: { backgroundColor: '#1976D2', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 16, alignItems: 'center' },
-  payslipBtnText: { color: '#fff', fontWeight: 'bold' },
+  sectionTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 18, color: '#222' },
+  card: { borderRadius: 18, padding: 18, marginBottom: 18, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
+  payPeriodLabel: { fontSize: 14, color: '#888', fontWeight: '500' },
+  payPeriod: { fontSize: 16, fontWeight: 'bold', color: '#1976D2' },
+  label: { fontSize: 15, color: '#555', fontWeight: '500' },
+  value: { fontSize: 16, fontWeight: 'bold', color: '#222' },
+  badge: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4, alignSelf: 'flex-start' },
+  badgePaid: { backgroundColor: '#B9F6CA' },
+  badgePending: { backgroundColor: '#FFF9C4' },
+  badgeFailed: { backgroundColor: '#FFCDD2' },
+  badgeText: { fontWeight: 'bold', fontSize: 13 },
+  badgeTextPaid: { color: '#388E3C' },
+  badgeTextPending: { color: '#8D6E63' },
+  badgeTextFailed: { color: '#C62828' },
+  payslipBtn: { backgroundColor: '#1976D2', borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
+  payslipBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
 
 export default PayslipScreen; 

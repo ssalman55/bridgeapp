@@ -61,6 +61,7 @@ const ClaimsHistoryScreen: React.FC = () => {
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { theme } = useTheme();
+  const [currency, setCurrency] = useState('QAR');
 
   const fetchClaims = async () => {
     setLoading(true);
@@ -78,6 +79,9 @@ const ClaimsHistoryScreen: React.FC = () => {
 
   useEffect(() => {
     fetchClaims();
+    apiService.getSystemSettings().then(settings => {
+      if (settings && settings.currency) setCurrency(settings.currency);
+    });
   }, []);
 
   const onRefresh = () => {
@@ -188,7 +192,7 @@ const ClaimsHistoryScreen: React.FC = () => {
                   <View style={styles.expandedSection}>
                     <View style={styles.expandedRow}>
                       <Text style={styles.expandedLabel}>Amount:</Text>
-                      <Text style={styles.expandedValue}>{getAmount(claim) != null ? `QAR ${getAmount(claim).toLocaleString()}` : '-'}</Text>
+                      <Text style={styles.expandedValue}>{getAmount(claim) != null ? `${currency} ${getAmount(claim).toLocaleString()}` : '-'}</Text>
                     </View>
                     <View style={styles.expandedRow}>
                       <Text style={styles.expandedLabel}>Submitted At:</Text>
