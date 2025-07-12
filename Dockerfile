@@ -15,8 +15,8 @@ WORKDIR /usr/src/app
 # Copy everything first
 COPY . .
 
-# Move backend files to working directory
-RUN mv "Read Me/backend/"* . && rm -rf "Read Me"
+# Move backend files to working directory using find command
+RUN find "Read Me/backend/" -type f -exec cp {} . \; && rm -rf "Read Me"
 
 # Install dependencies
 <<<<<<< HEAD
