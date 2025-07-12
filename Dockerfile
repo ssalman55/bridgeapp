@@ -8,12 +8,15 @@ WORKDIR /app
 # Use Node.js 18 LTS
 FROM node:18
 
-# Set working directory to backend
+# Set working directory
 WORKDIR /usr/src/app
 >>>>>>> 29b5c5b (Docker File Added)
 
-# Copy the backend directory (using .dockerignore to filter)
+# Copy everything first
 COPY . .
+
+# Move backend files to working directory
+RUN mv "Read Me/backend/"* . && rm -rf "Read Me"
 
 # Install dependencies
 <<<<<<< HEAD
