@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 // API Configuration
-const API_BASE_URL = 'https://backend-y16q.onrender.com/api';
+const API_BASE_URL = 'http://10.0.2.2:5000/api';
 
 class ApiService {
   private api: AxiosInstance;

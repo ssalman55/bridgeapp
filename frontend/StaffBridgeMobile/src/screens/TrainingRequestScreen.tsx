@@ -179,7 +179,7 @@ const TrainingRequestScreen: React.FC = () => {
 
         {/* Section 1: Training Details */}
         <Card style={[styles.sectionCard, { backgroundColor: theme.colors.surface }]}>
-          <Card.Content>
+        <Card.Content>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Training Details</Text>
 
             <PaperTextInput
@@ -211,7 +211,7 @@ const TrainingRequestScreen: React.FC = () => {
                 outlineColor={theme.colors.border}
                 activeOutlineColor={theme.colors.primary}
               />
-            </View>
+          </View>
 
             <PaperTextInput
               mode="outlined"
@@ -252,7 +252,7 @@ const TrainingRequestScreen: React.FC = () => {
                 outlineColor={theme.colors.border}
                 activeOutlineColor={theme.colors.primary}
               />
-            </View>
+          </View>
 
             <View style={styles.row}>
               <PaperTextInput
@@ -275,7 +275,7 @@ const TrainingRequestScreen: React.FC = () => {
                 outlineColor={theme.colors.border}
                 activeOutlineColor={theme.colors.primary}
               />
-            </View>
+          </View>
 
             <View style={styles.row}>
               <PaperTextInput
@@ -297,7 +297,7 @@ const TrainingRequestScreen: React.FC = () => {
                 outlineColor={theme.colors.border}
                 activeOutlineColor={theme.colors.primary}
               />
-            </View>
+          </View>
 
             <Card style={[styles.totalCard, { backgroundColor: theme.colors.primary + '10' }]}>
               <Card.Content>
@@ -388,11 +388,11 @@ const TrainingRequestScreen: React.FC = () => {
             >
               <Icon name="paperclip" size={24} color={theme.colors.primary} />
               <Text style={[styles.attachButtonText, { color: theme.colors.primary }]}>Attach Documents</Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
 
             {documents.length > 0 && (
               <View style={styles.documentsList}>
-                {documents.map((doc, idx) => (
+            {documents.map((doc, idx) => (
                   <Card key={doc._id || idx} style={[styles.documentCard, { backgroundColor: theme.colors.background }]}>
                     <Card.Content style={styles.documentContent}>
                       <Icon
@@ -410,14 +410,14 @@ const TrainingRequestScreen: React.FC = () => {
                         style={styles.removeDocument}
                       >
                         <Icon name="close" size={20} color={theme.colors.error} />
-                      </TouchableOpacity>
+                </TouchableOpacity>
                     </Card.Content>
                   </Card>
                 ))}
               </View>
             )}
-          </Card.Content>
-        </Card>
+        </Card.Content>
+      </Card>
 
         {success && (
           <Card style={[styles.successCard, { backgroundColor: theme.colors.success + '10' }]}>
