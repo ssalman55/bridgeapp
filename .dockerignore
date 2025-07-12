@@ -1,0 +1,4 @@
+# Exclude everything except the backend directory
+*
+!Read Me/backend/
+!Read Me/backend/** 
