@@ -12,8 +12,8 @@ FROM node:18
 WORKDIR /usr/src/app
 >>>>>>> 29b5c5b (Docker File Added)
 
-# Copy the entire backend directory
-COPY "Read Me/backend/" ./
+# Copy the entire backend directory (using wildcard to handle space in directory name)
+COPY Read\ Me/backend/ ./
 
 # Install dependencies
 <<<<<<< HEAD
