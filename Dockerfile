@@ -12,8 +12,8 @@ FROM node:18
 WORKDIR /usr/src/app
 >>>>>>> 29b5c5b (Docker File Added)
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Copy package.json and package-lock.json from the backend directory
+COPY "Read Me/backend/package*.json" ./
 
 # Install dependencies
 <<<<<<< HEAD
@@ -27,8 +27,8 @@ EXPOSE 3000
 =======
 RUN npm install
 
-# Copy the rest of the backend source code
-COPY . .
+# Copy the backend source code
+COPY "Read Me/backend/" ./
 
 # Expose port 5000
 EXPOSE 5000
