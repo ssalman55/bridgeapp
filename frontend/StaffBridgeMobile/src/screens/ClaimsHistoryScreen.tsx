@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager, Linking } from 'react-native';
-import { Card, Title, Paragraph, ActivityIndicator, Chip, TextInput, HelperText } from 'react-native-paper';
+import { Card, Title, Paragraph, ActivityIndicator, Chip, HelperText } from 'react-native-paper';
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import ClaimsFilterBar from '../components/ClaimsFilterBar';
 const API_BASE_URL = 'http://10.0.2.2:5000/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -39,12 +40,7 @@ const mockClaims = [
   },
 ];
 
-const STATUS_OPTIONS = [
-  { label: 'All Statuses', value: '' },
-  { label: 'Pending', value: 'Pending' },
-  { label: 'Approved', value: 'Approved' },
-  { label: 'Rejected', value: 'Rejected' },
-];
+
 
 const formatDate = (dateString: string) => {
   if (!dateString) return '-';
@@ -62,6 +58,11 @@ const ClaimsHistoryScreen: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { theme } = useTheme();
   const [currency, setCurrency] = useState('QAR');
+
+  const handleFilterPress = () => {
+    // TODO: Implement advanced filters modal/bottom sheet
+    console.log('Advanced filters pressed');
+  };
 
   const fetchClaims = async () => {
     setLoading(true);
@@ -124,39 +125,21 @@ const ClaimsHistoryScreen: React.FC = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled"
       >
-        <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}> 
-          <Card.Content>
-            <Title style={[styles.cardTitle, { color: theme.colors.text }]}>My Claims History</Title>
-            <TextInput
-              mode="outlined"
-              placeholder="Search by title..."
-              value={search}
-              onChangeText={setSearch}
-              style={styles.input}
-              left={<TextInput.Icon icon="magnify" />}
-            />
-            <View style={styles.filterRow}>
-              <View style={styles.statusFilter}>
-                <Text style={styles.filterLabel}>Status:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {STATUS_OPTIONS.map((opt) => (
-                    <Chip
-                      key={opt.value}
-                      selected={status === opt.value}
-                      onPress={() => setStatus(opt.value)}
-                      style={styles.chip}
-                    >
-                      {opt.label}
-                    </Chip>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, { flex: 3 }]}>Title</Text>
-          <Text style={[styles.headerCell, { flex: 1 }]}>Status</Text>
+        {/* Title Section */}
+        <View style={styles.titleContainer}>
+          <Title style={[styles.screenTitle, { color: theme.colors.text }]}>My Claims History</Title>
+        </View>
+
+        <ClaimsFilterBar
+          activeStatus={status}
+          onStatusChange={setStatus}
+          searchQuery={search}
+          onSearchChange={setSearch}
+          onFilterPress={handleFilterPress}
+        />
+        <View style={[styles.tableHeader, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.headerCell, { flex: 3, color: theme.colors.text }]}>Title</Text>
+          <Text style={[styles.headerCell, { flex: 1, color: theme.colors.text }]}>Status</Text>
         </View>
         {loading ? (
           <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
@@ -172,40 +155,63 @@ const ClaimsHistoryScreen: React.FC = () => {
             return (
               <View key={claim._id || idx}>
                 <TouchableOpacity
-                  style={[styles.tableRow, idx % 2 === 0 && styles.tableRowAlt]}
+                  style={[
+                    styles.tableRow, 
+                    { 
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                    idx % 2 === 0 && { backgroundColor: theme.colors.background }
+                  ]}
                   activeOpacity={0.7}
                   onPress={() => handleExpand(claim._id || idx.toString())}
                   accessibilityRole="button"
                   accessibilityLabel={`Expand details for ${claim.title}`}
                 >
-                  <Text style={[styles.cell, { flex: 3 }]} numberOfLines={2}>{claim.title || '-'}</Text>
+                  <Text style={[styles.cell, { flex: 3, color: theme.colors.text }]} numberOfLines={2}>{claim.title || '-'}</Text>
                   <View style={[styles.cell, { flex: 1 }]}> 
                     <Chip
-                      style={{ backgroundColor: claim.status === 'Approved' ? '#B9F6CA' : claim.status === 'Rejected' ? '#FF8A80' : '#FFF9C4', minWidth: 70, justifyContent: 'center' }}
-                      textStyle={{ color: claim.status === 'Approved' ? '#388E3C' : claim.status === 'Rejected' ? '#C62828' : '#8D6E63', fontWeight: 'bold', textAlign: 'center' }}
+                      style={{ 
+                        backgroundColor: claim.status === 'Approved' ? theme.colors.success + '20' : 
+                                     claim.status === 'Rejected' ? theme.colors.error + '20' : 
+                                     theme.colors.warning + '20',
+                        minWidth: 70, 
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: claim.status === 'Approved' ? theme.colors.success : 
+                                   claim.status === 'Rejected' ? theme.colors.error : 
+                                   theme.colors.warning,
+                      }}
+                      textStyle={{ 
+                        color: claim.status === 'Approved' ? theme.colors.success : 
+                               claim.status === 'Rejected' ? theme.colors.error : 
+                               theme.colors.warning, 
+                        fontWeight: '600', 
+                        textAlign: 'center' 
+                      }}
                     >
                       {typeof claim.status === 'string' ? claim.status : '-'}
                     </Chip>
                   </View>
                 </TouchableOpacity>
                 {expanded && (
-                  <View style={styles.expandedSection}>
+                  <View style={[styles.expandedSection, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                     <View style={styles.expandedRow}>
-                      <Text style={styles.expandedLabel}>Amount:</Text>
-                      <Text style={styles.expandedValue}>{getAmount(claim) != null ? `${currency} ${getAmount(claim).toLocaleString()}` : '-'}</Text>
+                      <Text style={[styles.expandedLabel, { color: theme.colors.textSecondary }]}>Amount:</Text>
+                      <Text style={[styles.expandedValue, { color: theme.colors.text }]}>{getAmount(claim) != null ? `${currency} ${getAmount(claim).toLocaleString()}` : '-'}</Text>
                     </View>
                     <View style={styles.expandedRow}>
-                      <Text style={styles.expandedLabel}>Submitted At:</Text>
-                      <Text style={styles.expandedValue}>{formatDate(claim.submittedAt)}</Text>
+                      <Text style={[styles.expandedLabel, { color: theme.colors.textSecondary }]}>Submitted At:</Text>
+                      <Text style={[styles.expandedValue, { color: theme.colors.text }]}>{formatDate(claim.submittedAt)}</Text>
                     </View>
                     <View style={styles.expandedRow}>
-                      <Text style={styles.expandedLabel}>Admin Comment:</Text>
-                      <Text style={styles.expandedValue}>{getLatestAdminComment(claim) || '-'}</Text>
+                      <Text style={[styles.expandedLabel, { color: theme.colors.textSecondary }]}>Admin Comment:</Text>
+                      <Text style={[styles.expandedValue, { color: theme.colors.text }]}>{getLatestAdminComment(claim) || '-'}</Text>
                     </View>
                     {/* Document Link */}
                     {Array.isArray(claim.documents) && claim.documents.length > 0 && claim.documents[0] && (
                       <View style={styles.expandedRow}>
-                        <Text style={styles.expandedLabel}>Document:</Text>
+                        <Text style={[styles.expandedLabel, { color: theme.colors.textSecondary }]}>Document:</Text>
                         <TouchableOpacity
                           onPress={async () => {
                             try {
@@ -225,7 +231,7 @@ const ClaimsHistoryScreen: React.FC = () => {
                             }
                           }}
                         >
-                          <Text style={[styles.expandedValue, { color: '#1976D2', textDecorationLine: 'underline' }]}>View Document</Text>
+                          <Text style={[styles.expandedValue, { color: theme.colors.primary, textDecorationLine: 'underline' }]}>View Document</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -242,89 +248,62 @@ const ClaimsHistoryScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  card: {
-    margin: 16,
-    marginTop: 8,
-    elevation: 2,
+  titleContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  cardTitle: {
-    fontSize: 18,
+  screenTitle: {
+    fontSize: 24,
     fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    marginBottom: 8,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statusFilter: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  filterLabel: {
-    marginRight: 8,
-    fontWeight: 'bold',
-  },
-  chip: {
-    marginRight: 8,
-    marginBottom: 4,
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderColor: '#eee',
+    borderBottomWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
   },
   headerCell: {
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
     fontSize: 14,
   },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  tableRowAlt: {
-    backgroundColor: '#fafafa',
+    marginHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 4,
   },
   cell: {
     fontSize: 15,
-    color: '#222',
-    marginRight: 4,
+    marginRight: 8,
   },
   expandedSection: {
-    backgroundColor: '#f9f9f9',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
-    borderColor: '#e0e0e0',
     borderWidth: 1,
     borderTopWidth: 0,
+    marginHorizontal: 16,
     marginBottom: 8,
   },
   expandedRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   expandedLabel: {
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '600',
     width: 120,
   },
   expandedValue: {
-    color: '#222',
     flex: 1,
     flexWrap: 'wrap',
   },

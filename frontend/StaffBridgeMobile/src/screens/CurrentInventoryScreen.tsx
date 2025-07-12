@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
-import { Card, Title, Paragraph, ActivityIndicator, Chip, TextInput, HelperText } from 'react-native-paper';
+import { Card, Title, Paragraph, ActivityIndicator, Chip, HelperText } from 'react-native-paper';
 import { useTheme } from '../context/ThemeContext';
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import apiService from '../services/api';
+import InventoryFilterBar from '../components/InventoryFilterBar';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const STATUS_OPTIONS = [
-  { label: 'All', value: '' },
-  { label: 'assigned', value: 'assigned' },
-  { label: 'in stock', value: 'In Stock' },
-];
+
 
 const formatDate = (dateString: string) => {
   if (!dateString) return '-';
@@ -32,6 +29,11 @@ const CurrentInventoryScreen: React.FC = () => {
   const { theme } = useTheme();
   const route = useRoute();
   const navigation = useNavigation();
+
+  const handleFilterPress = () => {
+    // TODO: Implement advanced filters modal/bottom sheet
+    console.log('Advanced filters pressed');
+  };
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -85,37 +87,21 @@ const CurrentInventoryScreen: React.FC = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         keyboardShouldPersistTaps="handled"
       >
-        <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}> 
-          <Card.Content>
-            <Title style={[styles.cardTitle, { color: theme.colors.text }]}>My Inventory Items</Title>
-            <TextInput
-              mode="outlined"
-              placeholder="Search by name or description"
-              value={search}
-              onChangeText={setSearch}
-              style={styles.input}
-              left={<TextInput.Icon icon="magnify" />}
-            />
-            <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Status:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {STATUS_OPTIONS.map((opt) => (
-                  <Chip
-                    key={opt.value}
-                    selected={status === opt.value}
-                    onPress={() => setStatus(opt.value)}
-                    style={styles.chip}
-                  >
-                    {opt.label}
-                  </Chip>
-                ))}
-              </ScrollView>
-            </View>
-          </Card.Content>
-        </Card>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, { flex: 3 }]}>Name</Text>
-          <Text style={[styles.headerCell, { flex: 1 }]}>Status</Text>
+        {/* Title Section */}
+        <View style={styles.titleContainer}>
+          <Title style={[styles.screenTitle, { color: theme.colors.text }]}>My Inventory Items</Title>
+        </View>
+
+        <InventoryFilterBar
+          activeStatus={status}
+          onStatusChange={setStatus}
+          searchQuery={search}
+          onSearchChange={setSearch}
+          onFilterPress={handleFilterPress}
+        />
+        <View style={[styles.tableHeader, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.headerCell, { flex: 3, color: theme.colors.text }]}>Name</Text>
+          <Text style={[styles.headerCell, { flex: 1, color: theme.colors.text }]}>Status</Text>
         </View>
         {loading ? (
           <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 32 }} />
@@ -131,31 +117,48 @@ const CurrentInventoryScreen: React.FC = () => {
             return (
               <View key={item._id || idx}>
                 <TouchableOpacity
-                  style={[styles.tableRow, idx % 2 === 0 && styles.tableRowAlt]}
+                  style={[
+                    styles.tableRow, 
+                    { 
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                    idx % 2 === 0 && { backgroundColor: theme.colors.background }
+                  ]}
                   activeOpacity={0.7}
                   onPress={() => handleExpand(item._id || idx.toString())}
                   accessibilityRole="button"
                   accessibilityLabel={`Expand details for ${item.name}`}
                 >
-                  <Text style={[styles.cell, { flex: 3 }]} numberOfLines={2}>{item.name || '-'}</Text>
+                  <Text style={[styles.cell, { flex: 3, color: theme.colors.text }]} numberOfLines={2}>{item.name || '-'}</Text>
                   <View style={[styles.cell, { flex: 1 }]}> 
                     <Chip
-                      style={{ backgroundColor: item.status === 'assigned' ? '#FFF9C4' : '#E0E0E0', minWidth: 70, justifyContent: 'center' }}
-                      textStyle={{ color: '#8D6E63', fontWeight: 'bold', textAlign: 'center' }}
+                      style={{ 
+                        backgroundColor: item.status === 'assigned' ? theme.colors.warning + '20' : theme.colors.disabled + '20',
+                        minWidth: 70, 
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: item.status === 'assigned' ? theme.colors.warning : theme.colors.disabled,
+                      }}
+                      textStyle={{ 
+                        color: item.status === 'assigned' ? theme.colors.warning : theme.colors.disabled, 
+                        fontWeight: '600', 
+                        textAlign: 'center' 
+                      }}
                     >
                       {typeof item.status === 'string' ? item.status : '-'}
                     </Chip>
                   </View>
                 </TouchableOpacity>
                 {expanded && (
-                  <View style={styles.expandedSection}>
+                  <View style={[styles.expandedSection, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                     <View style={styles.expandedRow}>
-                      <Text style={styles.expandedLabel}>Description:</Text>
-                      <Text style={styles.expandedValue}>{item.description || '-'}</Text>
+                      <Text style={[styles.expandedLabel, { color: theme.colors.textSecondary }]}>Description:</Text>
+                      <Text style={[styles.expandedValue, { color: theme.colors.text }]}>{item.description || '-'}</Text>
                     </View>
                     <View style={styles.expandedRow}>
-                      <Text style={styles.expandedLabel}>Assigned Date:</Text>
-                      <Text style={styles.expandedValue}>{formatDate(item.assignedDate)}</Text>
+                      <Text style={[styles.expandedLabel, { color: theme.colors.textSecondary }]}>Assigned Date:</Text>
+                      <Text style={[styles.expandedValue, { color: theme.colors.text }]}>{formatDate(item.assignedDate)}</Text>
                     </View>
                   </View>
                 )}
@@ -170,84 +173,62 @@ const CurrentInventoryScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  card: {
-    margin: 16,
-    marginTop: 8,
-    elevation: 2,
+  titleContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  cardTitle: {
-    fontSize: 18,
+  screenTitle: {
+    fontSize: 24,
     fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    marginBottom: 8,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  filterLabel: {
-    marginRight: 8,
-    fontWeight: 'bold',
-  },
-  chip: {
-    marginRight: 8,
-    marginBottom: 4,
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderColor: '#eee',
+    borderBottomWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
   },
   headerCell: {
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
     fontSize: 14,
   },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderColor: '#f0f0f0',
-    backgroundColor: '#fff',
-  },
-  tableRowAlt: {
-    backgroundColor: '#fafafa',
+    marginHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 4,
   },
   cell: {
     fontSize: 15,
-    color: '#222',
-    marginRight: 4,
+    marginRight: 8,
   },
   expandedSection: {
-    backgroundColor: '#f9f9f9',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
-    borderColor: '#e0e0e0',
     borderWidth: 1,
     borderTopWidth: 0,
+    marginHorizontal: 16,
     marginBottom: 8,
   },
   expandedRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   expandedLabel: {
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '600',
     width: 120,
   },
   expandedValue: {
-    color: '#222',
     flex: 1,
     flexWrap: 'wrap',
   },

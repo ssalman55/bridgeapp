@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
-import { Card, Title, Button } from 'react-native-paper';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity, 
+  TextInput, 
+  Alert, 
+  Platform,
+  KeyboardAvoidingView 
+} from 'react-native';
+import { Card, Title, Button, TextInput as PaperTextInput, Menu } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import apiService from '../services/api';
@@ -18,6 +29,7 @@ const InventoryRequestScreen: React.FC = () => {
     requiredDate: '',
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showItemMenu, setShowItemMenu] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -83,80 +95,308 @@ const InventoryRequestScreen: React.FC = () => {
     }
   };
 
+  const getCategoryIcon = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'electronics': return 'laptop';
+      case 'furniture': return 'seat';
+      case 'office supplies': return 'pencil';
+      case 'tools': return 'wrench';
+      case 'uniforms': return 'tshirt-crew';
+      default: return 'package-variant';
+    }
+  };
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ padding: 16 }}>
-      <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.title}>Request Inventory</Title>
-          {error && <Text style={styles.error}>{error}</Text>}
-          <Text style={styles.label}>Item Name *</Text>
-          <View style={styles.dropdownContainer}>
-            {itemOptions.map((item) => (
-              <TouchableOpacity
-                key={item.name}
-                style={[styles.dropdownItem, form.itemName === item.name && styles.dropdownItemSelected]}
-                onPress={() => handleItemSelect(item.name)}
-              >
-                <Text style={{ color: form.itemName === item.name ? '#fff' : theme.colors.text }}>{item.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TextInput
-            style={styles.input}
-            placeholder="Category *"
-            value={form.category}
-            onChangeText={v => handleChange('category', v)}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Quantity *"
-            value={form.quantity}
-            keyboardType="numeric"
-            onChangeText={v => handleChange('quantity', v)}
-          />
-          <TextInput
-            style={[styles.input, { minHeight: 60 }]}
-            placeholder="Justification *"
-            value={form.justification}
-            onChangeText={v => handleChange('justification', v)}
-            multiline
-          />
-          <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-            <Text style={{ color: form.requiredDate ? theme.colors.text : theme.colors.placeholder }}>
-              {form.requiredDate ? form.requiredDate : 'Required Date *'}
-            </Text>
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={form.requiredDate ? new Date(form.requiredDate) : new Date()}
-              mode="date"
-              display="default"
-              onChange={(event, date) => {
-                setShowDatePicker(false);
-                if (date) handleChange('requiredDate', date.toISOString().split('T')[0]);
-              }}
-            />
+    <KeyboardAvoidingView 
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Title style={[styles.title, { color: theme.colors.text }]}>Request Inventory</Title>
+          {error && (
+            <Card style={[styles.errorCard, { backgroundColor: theme.colors.error + '10' }]}>
+              <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
+            </Card>
           )}
-          <Button mode="contained" onPress={handleSubmit} loading={submitting} disabled={submitting} style={{ marginTop: 16 }}>
-            Submit Request
-          </Button>
-          {success && <Text style={styles.success}>Inventory request submitted!</Text>}
-        </Card.Content>
-      </Card>
-    </ScrollView>
+        </View>
+
+        {/* Section 1: Item Details */}
+        <Card style={[styles.sectionCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Content>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Item Details</Text>
+            
+            <Menu
+              visible={showItemMenu}
+              onDismiss={() => setShowItemMenu(false)}
+              anchor={
+                <TouchableOpacity 
+                  style={[styles.itemInput, { borderColor: theme.colors.border }]}
+                  onPress={() => setShowItemMenu(true)}
+                >
+                  <Icon name="package-variant" size={20} color={theme.colors.primary} style={styles.inputIcon} />
+                  <Text style={[styles.itemText, { color: form.itemName ? theme.colors.text : theme.colors.placeholder }]}>
+                    {form.itemName || 'Select Item *'}
+                  </Text>
+                  <Icon name="chevron-down" size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+              }
+            >
+              {itemOptions.map((item) => (
+                <Menu.Item
+                  key={item.name}
+                  onPress={() => {
+                    handleItemSelect(item.name);
+                    setShowItemMenu(false);
+                  }}
+                  title={item.name}
+                  leadingIcon={getCategoryIcon(item.category || '')}
+                />
+              ))}
+            </Menu>
+
+            <PaperTextInput
+              mode="outlined"
+              label="Category *"
+              value={form.category}
+              onChangeText={v => handleChange('category', v)}
+              style={styles.input}
+              outlineColor={theme.colors.border}
+              activeOutlineColor={theme.colors.primary}
+              left={<PaperTextInput.Icon icon="tag" />}
+            />
+
+            <PaperTextInput
+              mode="outlined"
+              label="Quantity *"
+              value={form.quantity}
+              onChangeText={v => handleChange('quantity', v)}
+              keyboardType="numeric"
+              style={styles.input}
+              outlineColor={theme.colors.border}
+              activeOutlineColor={theme.colors.primary}
+              left={<PaperTextInput.Icon icon="numeric" />}
+            />
+          </Card.Content>
+        </Card>
+
+        {/* Section 2: Request Details */}
+        <Card style={[styles.sectionCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Content>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Request Details</Text>
+
+            <TouchableOpacity 
+              style={[styles.dateInput, { borderColor: theme.colors.border }]} 
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Icon name="calendar" size={20} color={theme.colors.primary} style={styles.inputIcon} />
+              <Text style={[styles.dateText, { color: form.requiredDate ? theme.colors.text : theme.colors.placeholder }]}>
+                {form.requiredDate ? form.requiredDate : 'Required Date *'}
+              </Text>
+            </TouchableOpacity>
+
+            <PaperTextInput
+              mode="outlined"
+              label="Justification *"
+              value={form.justification}
+              onChangeText={v => handleChange('justification', v)}
+              multiline
+              numberOfLines={4}
+              style={styles.textArea}
+              outlineColor={theme.colors.border}
+              activeOutlineColor={theme.colors.primary}
+            />
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={form.requiredDate ? new Date(form.requiredDate) : new Date()}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowDatePicker(false);
+                  if (date) handleChange('requiredDate', date.toISOString().split('T')[0]);
+                }}
+              />
+            )}
+          </Card.Content>
+        </Card>
+
+        {/* Section 3: Request Summary */}
+        <Card style={[styles.sectionCard, { backgroundColor: theme.colors.surface }]}>
+          <Card.Content>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Request Summary</Text>
+            
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <Icon name="package-variant" size={20} color={theme.colors.primary} />
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Item:</Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{form.itemName || 'Not selected'}</Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Icon name="tag" size={20} color={theme.colors.primary} />
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Category:</Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{form.category || 'Not specified'}</Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Icon name="numeric" size={20} color={theme.colors.primary} />
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Quantity:</Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{form.quantity}</Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Icon name="calendar" size={20} color={theme.colors.primary} />
+                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Required Date:</Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{form.requiredDate || 'Not set'}</Text>
+              </View>
+            </View>
+          </Card.Content>
+        </Card>
+
+        {success && (
+          <Card style={[styles.successCard, { backgroundColor: theme.colors.success + '10' }]}>
+            <Text style={[styles.successText, { color: theme.colors.success }]}>Inventory request submitted successfully!</Text>
+          </Card>
+        )}
+      </ScrollView>
+
+      {/* Sticky Footer */}
+      <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
+        <Button
+          mode="contained"
+          onPress={handleSubmit}
+          loading={submitting}
+          disabled={submitting}
+          style={[styles.footerButton, { backgroundColor: theme.colors.primary }]}
+        >
+          Submit Request
+        </Button>
+      </View>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 18, padding: 16, marginBottom: 24 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 12 },
-  label: { fontWeight: 'bold', marginTop: 8, marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, padding: 8, marginBottom: 8, backgroundColor: '#F7F9FB', fontSize: 16 },
-  dropdownContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
-  dropdownItem: { borderWidth: 1, borderColor: '#1976D2', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 4, marginRight: 6, marginBottom: 4 },
-  dropdownItemSelected: { backgroundColor: '#1976D2', borderColor: '#1976D2' },
-  error: { color: '#D32F2F', marginBottom: 8 },
-  success: { color: '#388E3C', marginTop: 8, fontWeight: 'bold' },
+  header: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  errorCard: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sectionCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  input: {
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  itemInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  itemText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  dateInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  dateText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  textArea: {
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  summaryContainer: {
+    backgroundColor: 'transparent',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    marginRight: 8,
+    minWidth: 80,
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  successCard: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  successText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    borderTopWidth: 1,
+  },
+  footerButton: {
+    flex: 1,
+    borderRadius: 12,
+  },
 });
 
 export default InventoryRequestScreen; 

@@ -62,6 +62,17 @@ interface DashboardData {
   };
 }
 
+interface Bulletin {
+  _id: string;
+  title: string;
+  content: string;
+  postedBy: {
+    firstName: string;
+    lastName: string;
+  };
+  postedDate: string;
+}
+
 const DashboardScreen: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +88,8 @@ const DashboardScreen: React.FC = () => {
     createdAt?: string;
   }>>([]);
   const [recognitionsLoading, setRecognitionsLoading] = useState<boolean>(true);
+  const [bulletins, setBulletins] = useState<Bulletin[]>([]);
+  const [bulletinsLoading, setBulletinsLoading] = useState<boolean>(true);
 
   const { state } = useAuth();
   const { theme } = useTheme();
@@ -168,15 +181,41 @@ const DashboardScreen: React.FC = () => {
     }
   };
 
+  const fetchBulletins = async () => {
+    setBulletinsLoading(true);
+    try {
+      const data = await apiService.getBulletins({ limit: 3 });
+      // Defensive: sort by postedDate descending (missing dates go last), take only 3
+      const sorted = (Array.isArray(data) ? data : [])
+        .filter(b => b) // allow bulletins even if postedDate is missing
+        .sort((a, b) => {
+          if (!a.postedDate && !b.postedDate) return 0;
+          if (!a.postedDate) return 1;
+          if (!b.postedDate) return -1;
+          return new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime();
+        })
+        .slice(0, 3);
+      setBulletins(sorted);
+    } catch (error) {
+      setBulletins([]);
+    } finally {
+      setBulletinsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadDashboardData();
     fetchAttendance();
     fetchPeerRecognitions();
+    fetchBulletins();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadDashboardData();
+    fetchAttendance();
+    fetchPeerRecognitions();
+    fetchBulletins();
   };
 
   const handleAttendanceAction = async () => {
@@ -206,6 +245,38 @@ const DashboardScreen: React.FC = () => {
     } finally {
       setAttendanceActionLoading(false);
     }
+  };
+
+  const truncateContent = (content: string, maxLength: number = 100) => {
+    if (content.length <= maxLength) return content;
+    
+    // Try to find the first sentence
+    const firstSentence = content.match(/[^.!?]+[.!?]/);
+    if (firstSentence && firstSentence[0].length <= maxLength) {
+      return firstSentence[0].trim();
+    }
+    
+    // Otherwise truncate at word boundary
+    const truncated = content.substring(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'Unknown date';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Unknown date';
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
   };
 
   if (loading) {
@@ -331,6 +402,64 @@ const DashboardScreen: React.FC = () => {
                       </Text>
                     </View>
                   ))}
+                </View>
+              )}
+            </Card.Content>
+          </Card>
+
+          {/* Bulletin Board */}
+          <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}>
+            <Card.Content>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="bullhorn" size={22} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={[typography.h3, { color: theme.colors.primary }]}>📢 Bulletin Board</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => navigation.navigate('More', { screen: 'BulletinBoard' })}
+                  style={styles.viewAllButton}
+                >
+                  <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>View All</Text>
+                </TouchableOpacity>
+              </View>
+              {bulletinsLoading ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <View>
+                  {Array.isArray(bulletins) && bulletins.length === 0 ? (
+                    <Text style={[styles.noBulletinsText, { color: theme.colors.textSecondary }]}>No bulletins yet.</Text>
+                  ) : (
+                    (bulletins || []).map((bulletin, idx) => {
+                      const isLast = idx >= ((bulletins?.length || 0) - 1);
+                      return (
+                        <TouchableOpacity
+                          key={bulletin._id}
+                          style={[styles.bulletinCard, !isLast && { marginBottom: 12 }]}
+                          onPress={() => navigation.navigate('More', { screen: 'BulletinBoard' })}
+                        >
+                          <View style={styles.bulletinHeader}>
+                            <Text style={[styles.bulletinTitle, { color: theme.colors.text }]} numberOfLines={2}>
+                              {bulletin.title}
+                            </Text>
+                            <Text style={[styles.bulletinDate, { color: theme.colors.textSecondary }]}>
+                              {formatDate(bulletin.postedDate)}
+                            </Text>
+                          </View>
+                          <Text style={[styles.bulletinAuthor, { color: theme.colors.textSecondary }]}>
+                            Posted by {bulletin.postedBy
+                              ? `${bulletin.postedBy.firstName || ''} ${bulletin.postedBy.lastName || ''}`.trim() || 'Admin'
+                              : 'Admin'}
+                          </Text>
+                          <Text style={[styles.bulletinContent, { color: theme.colors.text }]} numberOfLines={3}>
+                            {truncateContent(bulletin.content || '')}
+                            {(bulletin.content || '').length > 100 && (
+                              <Text style={[styles.readMoreText, { color: theme.colors.primary }]}>... Read More</Text>
+                            )}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
                 </View>
               )}
             </Card.Content>
@@ -469,6 +598,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  viewAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary + '10',
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noBulletinsText: {
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  bulletinCard: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  bulletinHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  bulletinTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
+  },
+  bulletinDate: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  bulletinAuthor: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  bulletinContent: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  readMoreText: {
+    fontWeight: '600',
   },
 });
 
