@@ -30,6 +30,11 @@ const attendanceSchema = new mongoose.Schema({
     type: String,
     enum: ['present', 'absent', 'late', 'half-day'],
     default: 'present'
+  },
+  geofenceStatus: {
+    type: String,
+    enum: ['inside', 'outside', 'not_applicable'],
+    default: 'not_applicable'
   }
 });
 

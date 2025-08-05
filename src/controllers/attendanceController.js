@@ -20,28 +20,65 @@ const checkIn = asyncHandler(async (req, res) => {
   }
 
   // Check geofence settings
-  const geofenceSettings = await GeofenceSettings.findOne({ organization: req.user.organization });
+  const geofenceSettings = await GeofenceSettings.findOne({ 
+    organization: req.user.organization._id || req.user.organization 
+  });
+  
+  let geofenceStatus = 'not_applicable';
+  
+  // Debug logging
+  console.log('Geofence settings:', geofenceSettings);
+  console.log('User organization:', req.user.organization);
+  console.log('User organization ID:', req.user.organization?._id);
+  console.log('User organization ID string:', req.user.organization?._id?.toString());
   
   // If geofencing is enabled, verify location
   if (geofenceSettings?.isEnabled) {
+    console.log('Geofencing is enabled');
     // Fetch all geofences for the user's organization
-    const geofences = await Geofence.find({ organization: req.user.organization });
-    if (!geofences.length) {
-      return res.status(403).json({ message: 'No authorized check-in locations are configured.' });
-    }
-
-    // Check if user is within any geofence
-    const isWithinGeofence = geofences.some(geofence => {
-      const distance = haversineDistance(latitude, longitude, geofence.latitude, geofence.longitude);
-      return distance <= geofence.radius;
+    const geofences = await Geofence.find({ 
+      organization: req.user.organization._id || req.user.organization 
     });
+    
+    console.log('Found geofences:', geofences.length);
+    
+    if (geofences.length > 0) {
+      // Check if user is within any geofence
+      const isWithinGeofence = geofences.some(geofence => {
+        const distance = haversineDistance(latitude, longitude, geofence.latitude, geofence.longitude);
+        return distance <= geofence.radius;
+      });
 
-    if (!isWithinGeofence) {
-      return res.status(403).json({ message: 'You are not within an authorized check-in location.' });
+      if (isWithinGeofence) {
+        geofenceStatus = 'inside';
+        console.log('User is within geofence');
+      } else {
+        geofenceStatus = 'outside';
+        console.log('User is outside geofence');
+        console.log('allowCheckInOutside:', geofenceSettings.allowCheckInOutside);
+        
+        // If allowCheckInOutside is false, block the check-in
+        // Use fallback to false if the field doesn't exist (for backward compatibility)
+        if (!(geofenceSettings.allowCheckInOutside ?? false)) {
+          const geofenceNames = geofences.map(g => g.name).join(', ');
+          console.log('Blocking check-in - user outside geofence and allowCheckInOutside is false');
+          return res.status(403).json({ 
+            message: `You must be at ${geofenceNames} to check in.` 
+          });
+        } else {
+          console.log('Allowing check-in - user outside geofence but allowCheckInOutside is true');
+        }
+      }
+    } else {
+      // No geofences configured but geofencing is enabled
+      // If no geofences exist, user cannot be "outside" any geofence, so allow check-in
+      // but still set status as 'not_applicable' since no geofences are configured
+      geofenceStatus = 'not_applicable';
+      console.log('No geofences found - allowing check-in with not_applicable status');
     }
+  } else {
+    console.log('Geofencing is disabled or no settings found');
   }
-
-  // Find the latest attendance record for today
   const existingAttendance = await Attendance.findOne({
     user: req.user._id,
     checkIn: {
@@ -52,12 +89,14 @@ const checkIn = asyncHandler(async (req, res) => {
 
   // Allow new check-in if no record exists or last record is checked out
   if (!existingAttendance || existingAttendance.checkOut) {
+    console.log('Creating attendance record with geofenceStatus:', geofenceStatus);
     const attendance = await Attendance.create({
       user: req.user._id,
       organization: req.user.organization._id,
       date: today,
       checkIn: new Date(),
-      location: { latitude, longitude }
+      location: { latitude, longitude },
+      geofenceStatus: geofenceStatus
     });
     return res.status(201).json(attendance);
   }
@@ -297,7 +336,8 @@ const getAttendanceStatus = asyncHandler(async (req, res) => {
     isCheckedIn: false,
     isCheckedOut: false,
     lastCheckIn: null,
-    lastCheckOut: null
+    lastCheckOut: null,
+    geofenceStatus: null
   };
 
   if (attendance) {
@@ -305,6 +345,7 @@ const getAttendanceStatus = asyncHandler(async (req, res) => {
     status.isCheckedOut = !!attendance.checkOut;
     status.lastCheckIn = attendance.checkIn;
     status.lastCheckOut = attendance.checkOut;
+    status.geofenceStatus = attendance.geofenceStatus || null;
   }
 
   res.json(status);

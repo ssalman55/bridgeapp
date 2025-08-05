@@ -10,6 +10,10 @@ const geofenceSettingsSchema = new mongoose.Schema({
   isEnabled: {
     type: Boolean,
     default: false // Geofencing is disabled by default
+  },
+  allowCheckInOutside: {
+    type: Boolean,
+    default: false // By default, users must be within geofence to check in
   }
 }, { timestamps: true });
 
