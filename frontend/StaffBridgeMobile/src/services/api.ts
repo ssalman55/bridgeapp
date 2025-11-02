@@ -24,10 +24,19 @@ class ApiService {
     // Request interceptor to add auth token
     this.api.interceptors.request.use(
       async (config) => {
-        const token = await SecureStore.getItemAsync('auth_token');
-        console.log('Using token:', token); // Debug log
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+        // Don't add token to login/register endpoints
+        const isAuthEndpoint = config.url?.includes('/mobile/login') || 
+                               config.url?.includes('/auth/login') || 
+                               config.url?.includes('/auth/register');
+        
+        if (!isAuthEndpoint) {
+          const token = await SecureStore.getItemAsync('auth_token');
+          console.log('Using token:', token); // Debug log
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        } else {
+          console.log('Auth endpoint - not adding token');
         }
         return config;
       },
@@ -41,8 +50,13 @@ class ApiService {
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
+        
+        // Don't attempt token refresh for auth endpoints (login/register)
+        const isAuthEndpoint = originalRequest.url?.includes('/mobile/login') || 
+                               originalRequest.url?.includes('/auth/login') || 
+                               originalRequest.url?.includes('/auth/register');
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
           originalRequest._retry = true;
 
           try {
@@ -60,10 +74,16 @@ class ApiService {
 
               originalRequest.headers.Authorization = `Bearer ${token}`;
               return this.api(originalRequest);
+            } else {
+              // No refresh token, clear auth but don't auto-logout (let the UI handle it)
+              await this.logout();
             }
           } catch (refreshError) {
-            // Refresh failed, redirect to login
-            await this.logout();
+            // Refresh failed, clear auth but don't auto-logout on login endpoints
+            console.error('Token refresh failed:', refreshError);
+            if (!isAuthEndpoint) {
+              await this.logout();
+            }
           }
         }
 

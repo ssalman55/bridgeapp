@@ -82,6 +82,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('AuthContext: State changed', state);
   }, [state]);
 
+  // Helper function to decode base64 in React Native
+  const base64Decode = (str: string): string => {
+    try {
+      // React Native compatible base64 decode
+      // Base64 characters to binary conversion
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      let output = '';
+      let i = 0;
+      
+      str = str.replace(/[^A-Za-z0-9\+\/\=]/g, '');
+      
+      while (i < str.length) {
+        const enc1 = chars.indexOf(str.charAt(i++));
+        const enc2 = chars.indexOf(str.charAt(i++));
+        const enc3 = chars.indexOf(str.charAt(i++));
+        const enc4 = chars.indexOf(str.charAt(i++));
+        
+        const bits = (enc1 << 18) | (enc2 << 12) | (enc3 << 6) | enc4;
+        
+        if (enc3 === 64) {
+          output += String.fromCharCode((bits >> 16) & 255);
+        } else if (enc4 === 64) {
+          output += String.fromCharCode((bits >> 16) & 255, (bits >> 8) & 255);
+        } else {
+          output += String.fromCharCode((bits >> 16) & 255, (bits >> 8) & 255, bits & 255);
+        }
+      }
+      
+      return output;
+    } catch (error) {
+      throw new Error('Base64 decode error');
+    }
+  };
+
+  // Helper function to check if JWT token is expired
+  const isTokenExpired = (token: string): boolean => {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return true; // Invalid token format
+      }
+      
+      const payload = JSON.parse(base64Decode(parts[1]));
+      if (!payload.exp) {
+        return false; // No expiration, assume valid
+      }
+      
+      const exp = payload.exp * 1000; // Convert to milliseconds
+      const now = Date.now();
+      const isExpired = exp < now;
+      
+      if (isExpired) {
+        console.log('Token expired:', { exp: new Date(exp), now: new Date(now) });
+      }
+      
+      return isExpired;
+    } catch (error) {
+      console.error('Error checking token expiration:', error);
+      return true; // Assume expired if we can't parse it
+    }
+  };
+
   const loadStoredAuth = async () => {
     try {
       console.log('AuthContext: Loading stored auth...');
@@ -92,6 +154,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('AuthContext: Token:', token, 'UserData:', userData);
 
       if (token && userData) {
+        // Check if token is expired
+        if (isTokenExpired(token)) {
+          console.log('AuthContext: Token expired, clearing auth');
+          await Promise.all([
+            SecureStore.deleteItemAsync('auth_token'),
+            AsyncStorage.removeItem('user_data'),
+          ]);
+          dispatch({ type: 'AUTH_LOGOUT' });
+          return;
+        }
+        
         const user = JSON.parse(userData);
         console.log('AuthContext: Dispatching AUTH_SUCCESS');
         dispatch({
