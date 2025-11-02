@@ -102,8 +102,22 @@ class ApiService {
 
   // Auth endpoints
   async login(email: string, password: string) {
-    const response = await this.api.post('/mobile/login', { email, password });
-    return response.data;
+    try {
+      console.log('Login request:', { email, passwordLength: password?.length });
+      const response = await this.api.post('/mobile/login', { email, password });
+      console.log('Login response success:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Login error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL
+      });
+      throw error;
+    }
   }
 
   async logoutUser() {

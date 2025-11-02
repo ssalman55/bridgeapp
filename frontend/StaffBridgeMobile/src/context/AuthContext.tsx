@@ -184,8 +184,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     try {
       dispatch({ type: 'AUTH_START' });
+      console.log('AuthContext: Attempting login for:', email);
       const data = await apiService.login(email, password);
-      console.log('Login response:', data);
+      console.log('AuthContext: Login response:', data);
       if (data.success) {
         const user = data.user;
         // Map fullName to firstName and lastName if needed
@@ -210,12 +211,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         Alert.alert('Login Failed', data.message || 'Login failed');
       }
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed';
+      console.error('AuthContext: Login error:', {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+        fullError: error
+      });
       dispatch({
         type: 'AUTH_FAILURE',
-        payload: error instanceof Error ? error.message : 'Login failed',
+        payload: errorMessage,
       });
-      Alert.alert('Login Failed', error instanceof Error ? error.message : 'Login failed');
+      Alert.alert('Login Failed', errorMessage);
     }
   };
 
