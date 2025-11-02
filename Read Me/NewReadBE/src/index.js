@@ -144,6 +144,9 @@ app.use('/api/auth/login', loginLimiter);
 // Each route file now handles its own subscription and feature access checks
 
 // Routes
+// IMPORTANT: Register /api/mobile BEFORE any catch-all /api routes to avoid middleware conflicts
+app.use('/api/mobile', mobileAuthRoutes);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -192,7 +195,6 @@ app.use('/api/letter-requests', letterRequestRoutes);
 app.use('/api/head-office', headOfficeRoutes);
 app.use('/api/enhanced-payroll', enhancedPayrollRoutes);
 app.use('/api/reports', require('./routes/reportRoutes'));
-app.use('/api/mobile', mobileAuthRoutes);
 
 // Global error handling middleware
 app.use((err, req, res, next) => {
