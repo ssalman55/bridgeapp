@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 // API Configuration
-const API_BASE_URL = 'http://10.0.2.2:5000/api';
+const API_BASE_URL = 'https://sbapp.onrender.com/api';
 
 class ApiService {
   private api: AxiosInstance;
@@ -126,6 +126,15 @@ class ApiService {
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to fetch today\'s attendance');
+    }
+  }
+
+  async getAttendanceStatus() {
+    try {
+      const response = await this.api.get('/attendance/status');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch attendance status');
     }
   }
 
@@ -318,6 +327,12 @@ class ApiService {
       : [];
   }
 
+  // Peer Recognition endpoints
+  async getActivePeers() {
+    const response = await this.api.get('/staff/active-peers');
+    return response.data;
+  }
+
   async getMyExpenseClaims() {
     const response = await this.api.get('/expense-claims/my');
     return response.data;
@@ -369,6 +384,11 @@ class ApiService {
 
   async getSystemSettings() {
     const response = await this.api.get('/settings');
+    return response.data;
+  }
+
+  async createPeerRecognition(data: { submitter: string; recognized: string; comment: string; organization: string; }) {
+    const response = await this.api.post('/recognitions', data);
     return response.data;
   }
 }

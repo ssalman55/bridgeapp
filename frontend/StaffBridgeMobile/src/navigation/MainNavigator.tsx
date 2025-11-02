@@ -39,6 +39,7 @@ import AttendanceHistoryScreen from '../screens/AttendanceHistoryScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
 import TrainingRequestScreen from '../screens/TrainingRequestScreen';
 import PayslipScreen from '../screens/PayslipScreen';
+import RecognizePeerScreen from '../screens/RecognizePeerScreen';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -60,6 +61,7 @@ export type SubmenuStackParamList = {
   InventoryRequest: undefined;
   CurrentInventory: undefined;
   Payslip: undefined;
+  RecognizePeer: undefined;
   
   // Tasks submenu
   AssignedTasks: undefined;
@@ -140,8 +142,22 @@ const SubmenuStackNavigator: React.FC = () => {
       {/* More submenu */}
       <Stack.Screen name="StaffDirectory" component={StaffDirectoryScreen} />
       <Stack.Screen name="BulletinBoard" component={BulletinsScreen} />
-      <Stack.Screen name="MyDocuments" component={DocumentsScreen} />
+      <Stack.Screen 
+        name="MyDocuments" 
+        component={DocumentsScreen} 
+        options={({ navigation }) => ({
+          headerRight: () => (
+            <TouchableOpacity onPress={() => {
+              // This will be handled by the DocumentsScreen component
+              // The component sets up its own navigation params
+            }} style={{ marginRight: 12 }} accessibilityLabel="Add new document">
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="RecognizePeer" component={RecognizePeerScreen} options={{ title: 'Recognize a Peer' }} />
     </Stack.Navigator>
   );
 };
