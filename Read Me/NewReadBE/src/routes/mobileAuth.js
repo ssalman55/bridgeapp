@@ -9,7 +9,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key';
 
 // POST /api/mobile/login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  // Trim email and password to handle any whitespace issues
+  const email = req.body.email ? req.body.email.trim().toLowerCase() : '';
+  const password = req.body.password ? req.body.password.trim() : '';
   
   console.log('[Mobile Auth] Login attempt:', { 
     email, 
@@ -23,7 +25,7 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Email and password are required.' });
   }
 
-  // Validate email format
+  // Validate email format (after trimming and lowercasing)
   if (!validateEmail(email)) {
     console.log('[Mobile Auth] Invalid email format:', email);
     return res.status(400).json({ success: false, message: 'Invalid email format' });
@@ -31,7 +33,8 @@ router.post('/login', async (req, res) => {
 
   try {
     // Find all users with this email (could be multiple due to different organizations)
-    const users = await User.find({ email: email.toLowerCase() })
+    // Note: email is already lowercased above
+    const users = await User.find({ email })
       .select('+password')
       .populate({
         path: 'organization',
@@ -39,13 +42,13 @@ router.post('/login', async (req, res) => {
       });
     
     console.log('[Mobile Auth] Users found:', {
-      email: email.toLowerCase(),
+      email: email,
       count: users.length,
       userIds: users.map(u => u._id)
     });
 
     if (!users || users.length === 0) {
-      console.log('[Mobile Auth] User not found for email:', email.toLowerCase());
+      console.log('[Mobile Auth] User not found for email:', email);
       return res.status(401).json({ success: false, message: 'Invalid credentials.' });
     }
 
