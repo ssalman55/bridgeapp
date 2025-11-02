@@ -77,7 +77,13 @@ const DashboardScreen: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [attendance, setAttendance] = useState<{ checkIn?: string; checkOut?: string } | null>(null);
+  const [attendance, setAttendance] = useState<{
+    isCheckedIn: boolean;
+    isCheckedOut: boolean;
+    lastCheckIn?: string;
+    lastCheckOut?: string;
+    geofenceStatus?: 'inside' | 'outside' | 'not_applicable' | null;
+  } | null>(null);
   const [attendanceLoading, setAttendanceLoading] = useState<boolean>(true);
   const [attendanceActionLoading, setAttendanceActionLoading] = useState<boolean>(false);
   const [peerRecognitions, setPeerRecognitions] = useState<Array<{
@@ -158,7 +164,7 @@ const DashboardScreen: React.FC = () => {
   const fetchAttendance = async () => {
     setAttendanceLoading(true);
     try {
-      const data = await apiService.getTodayAttendance();
+      const data = await apiService.getAttendanceStatus();
       console.log('Today attendance data:', data);
       setAttendance(data);
     } catch (error) {
@@ -221,7 +227,7 @@ const DashboardScreen: React.FC = () => {
   const handleAttendanceAction = async () => {
     setAttendanceActionLoading(true);
     try {
-      if (!attendance || attendance.checkOut) {
+      if (!attendance || attendance.isCheckedOut) {
         // Check In
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
@@ -241,7 +247,12 @@ const DashboardScreen: React.FC = () => {
       await fetchAttendance();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to update attendance.';
-      Alert.alert('Error', message);
+      // Handle geofencing errors specifically
+      if (message.includes('must be at')) {
+        Alert.alert('Location Restriction', message);
+      } else {
+        Alert.alert('Error', message);
+      }
     } finally {
       setAttendanceActionLoading(false);
     }
@@ -344,26 +355,45 @@ const DashboardScreen: React.FC = () => {
                   <TouchableOpacity
                     onPress={handleAttendanceAction}
                     disabled={attendanceActionLoading}
-                    style={[styles.attendanceButton, attendance && !attendance.checkOut ? styles.attendanceButtonCheckedIn : styles.attendanceButtonDefault]}
+                    style={[styles.attendanceButton, attendance && !attendance.isCheckedOut ? styles.attendanceButtonCheckedIn : styles.attendanceButtonDefault]}
                   >
                     <Icon
-                      name={attendance && !attendance.checkOut ? 'logout' : 'login'}
+                      name={attendance && !attendance.isCheckedOut ? 'logout' : 'login'}
                       size={20}
                       color="#fff"
                       style={{ marginRight: 8 }}
                     />
                     <Text style={styles.attendanceButtonText}>
-                      {attendance && !attendance.checkOut ? 'Check Out' : 'Check In'}
+                      {attendance && !attendance.isCheckedOut ? 'Check Out' : 'Check In'}
                     </Text>
                   </TouchableOpacity>
                   <View style={styles.attendanceInfo}>
                     {attendance && (
                       <>
-                        <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>Check-in: {attendance.checkIn ? new Date(attendance.checkIn).toLocaleTimeString() : '--'}</Text>
-                        {attendance.checkOut && (
-                          <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>Check-out: {new Date(attendance.checkOut).toLocaleTimeString()}</Text>
+                        <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>Check-in: {attendance.lastCheckIn ? new Date(attendance.lastCheckIn).toLocaleTimeString() : '--'}</Text>
+                        {attendance.lastCheckOut && (
+                          <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>Check-out: {new Date(attendance.lastCheckOut).toLocaleTimeString()}</Text>
                         )}
-                        <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>Status: {attendance.checkOut ? 'Checked out' : 'Currently checked in'}</Text>
+                        <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>
+                          Status: {
+                            attendance.isCheckedOut 
+                              ? 'Checked out' 
+                              : attendance.isCheckedIn 
+                                ? (() => {
+                                    switch (attendance.geofenceStatus) {
+                                      case 'inside':
+                                        return 'Checked In (Geofence Location)';
+                                      case 'outside':
+                                        return 'Checked In (Remotely)';
+                                      case 'not_applicable':
+                                      case null:
+                                      default:
+                                        return 'Checked In (Location Not Tracked)';
+                                    }
+                                  })()
+                                : 'Not checked in'
+                          }
+                        </Text>
                       </>
                     )}
                     {!attendance && (
@@ -378,9 +408,14 @@ const DashboardScreen: React.FC = () => {
           {/* Peer Recognitions */}
           <Card style={[styles.sectionCard, { marginBottom: spacing.md }]}>
             <Card.Content>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                <Icon name="account-star-outline" size={22} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                <Text style={[typography.h3, { color: theme.colors.primary }]}>Peer Recognitions</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="account-star-outline" size={22} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={[typography.h3, { color: theme.colors.primary }]}>Peer Recognitions</Text>
+                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('Requests', { screen: 'RecognizePeer' })} style={{ marginLeft: 8 }}>
+                  <Icon name="plus-circle" size={26} color={theme.colors.primary} />
+                </TouchableOpacity>
               </View>
               {recognitionsLoading ? (
                 <ActivityIndicator size="small" color={theme.colors.primary} />

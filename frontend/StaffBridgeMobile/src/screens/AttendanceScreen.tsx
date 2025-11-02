@@ -22,6 +22,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import apiService from '../services/api';
 
 interface AttendanceRecord {
   id: string;
@@ -36,6 +37,14 @@ interface AttendanceRecord {
   photo?: string;
 }
 
+interface AttendanceStatus {
+  isCheckedIn: boolean;
+  isCheckedOut: boolean;
+  lastCheckIn?: string;
+  lastCheckOut?: string;
+  geofenceStatus?: 'inside' | 'outside' | 'not_applicable' | null;
+}
+
 const AttendanceScreen: React.FC = () => {
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +52,8 @@ const AttendanceScreen: React.FC = () => {
   const [markingAttendance, setMarkingAttendance] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [attendanceType, setAttendanceType] = useState<'in' | 'out'>('in');
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
 
   const { state } = useAuth();
   const { theme } = useTheme();
@@ -82,13 +93,28 @@ const AttendanceScreen: React.FC = () => {
     }
   };
 
+  const fetchAttendanceStatus = async () => {
+    setStatusLoading(true);
+    try {
+      const status = await apiService.getAttendanceStatus();
+      setAttendanceStatus(status);
+    } catch (error) {
+      console.error('Error fetching attendance status:', error);
+      setAttendanceStatus(null);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadAttendanceHistory();
+    fetchAttendanceStatus();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadAttendanceHistory();
+    fetchAttendanceStatus();
   };
 
   const getCurrentLocation = async () => {
@@ -142,20 +168,39 @@ const AttendanceScreen: React.FC = () => {
   const confirmAttendance = async () => {
     setMarkingAttendance(true);
     try {
-      const currentLocation = await getCurrentLocation();
-      const attendancePhoto = await takePhoto();
+      if (attendanceType === 'in') {
+        // Check In with location
+        const currentLocation = await getCurrentLocation();
+        if (!currentLocation) {
+          setMarkingAttendance(false);
+          return;
+        }
 
-      if (!currentLocation) {
-        setMarkingAttendance(false);
-        return;
+        try {
+          await apiService.checkIn({
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+          });
+          
+          Alert.alert('Success', 'Successfully checked in!');
+        } catch (error: any) {
+          // Handle geofencing errors
+          if (error.message && error.message.includes('must be at')) {
+            Alert.alert('Location Restriction', error.message);
+          } else {
+            Alert.alert('Error', error.message || 'Failed to check in. Please try again.');
+          }
+          setMarkingAttendance(false);
+          return;
+        }
+      } else {
+        // Check Out (no location needed)
+        await apiService.checkOut();
+        Alert.alert('Success', 'Successfully checked out!');
       }
 
-      Alert.alert(
-        'Success',
-        `Successfully marked ${attendanceType === 'in' ? 'check-in' : 'check-out'}!`
-      );
-
       setModalVisible(false);
+      await fetchAttendanceStatus(); // Refresh the status
       loadAttendanceHistory(); // Refresh the list
     } catch (error) {
       console.error('Error marking attendance:', error);
@@ -189,6 +234,52 @@ const AttendanceScreen: React.FC = () => {
     });
   };
 
+  const getAttendanceStatusText = () => {
+    if (!attendanceStatus) return 'Not Checked In';
+    
+    if (attendanceStatus.isCheckedOut) {
+      return 'Checked Out';
+    }
+    
+    if (attendanceStatus.isCheckedIn) {
+      switch (attendanceStatus.geofenceStatus) {
+        case 'inside':
+          return 'Checked In (Geofence Location)';
+        case 'outside':
+          return 'Checked In (Remotely)';
+        case 'not_applicable':
+        case null:
+        default:
+          return 'Checked In (Location Not Tracked)';
+      }
+    }
+    
+    return 'Not Checked In';
+  };
+
+  const getAttendanceStatusColor = () => {
+    if (!attendanceStatus) return theme.colors.error;
+    
+    if (attendanceStatus.isCheckedOut) {
+      return theme.colors.warning;
+    }
+    
+    if (attendanceStatus.isCheckedIn) {
+      switch (attendanceStatus.geofenceStatus) {
+        case 'inside':
+          return theme.colors.success;
+        case 'outside':
+          return theme.colors.warning;
+        case 'not_applicable':
+        case null:
+        default:
+          return theme.colors.info;
+      }
+    }
+    
+    return theme.colors.error;
+  };
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
@@ -211,13 +302,17 @@ const AttendanceScreen: React.FC = () => {
               Today&apos;s Attendance
             </Title>
             <View style={styles.todayStatus}>
-              <Chip
-                mode="outlined"
-                textStyle={{ color: theme.colors.primary }}
-                style={[styles.statusChip, { borderColor: theme.colors.primary }]}
-              >
-                Not Checked In
-              </Chip>
+              {statusLoading ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <Chip
+                  mode="outlined"
+                  textStyle={{ color: getAttendanceStatusColor() }}
+                  style={[styles.statusChip, { borderColor: getAttendanceStatusColor() }]}
+                >
+                  {getAttendanceStatusText()}
+                </Chip>
+              )}
               <Paragraph style={[styles.timeText, { color: theme.colors.textSecondary }]}>
                 {new Date().toLocaleDateString('en-US', {
                   weekday: 'long',
@@ -226,12 +321,23 @@ const AttendanceScreen: React.FC = () => {
                   day: 'numeric',
                 })}
               </Paragraph>
+              {attendanceStatus && attendanceStatus.isCheckedIn && attendanceStatus.lastCheckIn && (
+                <Paragraph style={[styles.timeText, { color: theme.colors.textSecondary }]}>
+                  Check-in: {new Date(attendanceStatus.lastCheckIn).toLocaleTimeString()}
+                </Paragraph>
+              )}
+              {attendanceStatus && attendanceStatus.isCheckedOut && attendanceStatus.lastCheckOut && (
+                <Paragraph style={[styles.timeText, { color: theme.colors.textSecondary }]}>
+                  Check-out: {new Date(attendanceStatus.lastCheckOut).toLocaleTimeString()}
+                </Paragraph>
+              )}
             </View>
             <View style={styles.actionButtons}>
               <Button
                 mode="contained"
                 icon="login"
                 onPress={() => markAttendance('in')}
+                disabled={attendanceStatus?.isCheckedIn && !attendanceStatus?.isCheckedOut}
                 style={[styles.actionButton, { backgroundColor: theme.colors.success }]}
                 contentStyle={styles.actionButtonContent}
               >
@@ -241,6 +347,7 @@ const AttendanceScreen: React.FC = () => {
                 mode="contained"
                 icon="logout"
                 onPress={() => markAttendance('out')}
+                disabled={!attendanceStatus?.isCheckedIn || attendanceStatus?.isCheckedOut}
                 style={[styles.actionButton, { backgroundColor: theme.colors.warning }]}
                 contentStyle={styles.actionButtonContent}
               >
@@ -308,7 +415,10 @@ const AttendanceScreen: React.FC = () => {
             Mark {attendanceType === 'in' ? 'Check-in' : 'Check-out'}
           </Title>
           <Paragraph style={[styles.modalDescription, { color: theme.colors.textSecondary }]}>
-            Please confirm your {attendanceType === 'in' ? 'check-in' : 'check-out'} with location and photo.
+            {attendanceType === 'in' 
+              ? 'Please confirm your check-in. Your location will be recorded and geofencing rules will be applied.'
+              : 'Please confirm your check-out.'
+            }
           </Paragraph>
           
           <View style={styles.modalActions}>
