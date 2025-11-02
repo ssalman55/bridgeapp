@@ -1,0 +1,36 @@
+{
+  "name": "staffbridge",
+  "version": "1.0.0",
+  "description": "SaaS HR Management Web Application",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm run dev",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "dev": "vite"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/file-saver": "^2.0.7",
+    "@types/react-tooltip": "^3.11.0",
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.4",
+    "@sendgrid/mail": "^8.1.5",
+    "@types/he": "^1.2.3",
+    "chart.js": "^4.5.0",
+    "cookie-parser": "^1.4.7",
+    "file-saver": "^2.0.5",
+    "he": "^1.2.0",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "papaparse": "^5.5.2",
+    "pdfkit": "^0.17.1",
+    "react-calendar": "^5.1.0",
+    "react-chartjs-2": "^5.3.0",
+    "react-quill": "^2.0.0",
+    "react-tooltip": "^5.29.1"
+  }
+}

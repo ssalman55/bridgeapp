@@ -6,15 +6,16 @@ export interface User {
   lastName: string;
   role: string;
   department: string;
-  position: string;
-  employeeId: string;
+  position?: string;
+  employeeId?: string;
   phoneNumber?: string;
   profilePicture?: string;
-  permissions: string[];
+  permissions?: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  organization?: string;
+  organization?: string | { _id: string; name: string };
+  organizationObj?: { _id: string; name: string };
 }
 
 export interface AuthState {

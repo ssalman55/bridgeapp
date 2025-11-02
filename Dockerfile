@@ -8,12 +8,12 @@ WORKDIR /usr/src/app
 COPY . .
 
 # Debug: Check what's in the backend directory
-RUN ls -la "Read Me/backend/" || echo "Backend directory check"
+RUN ls -la "Read Me/NewReadBE/" || echo "Backend directory check"
 
-# Copy backend files explicitly
-RUN cp "Read Me/backend/package.json" . && \
-    cp "Read Me/backend/package-lock.json" . && \
-    cp -r "Read Me/backend/src" . && \
+# Copy backend files explicitly from NewReadBE
+RUN cp "Read Me/NewReadBE/package.json" . && \
+    cp "Read Me/NewReadBE/package-lock.json" . && \
+    cp -r "Read Me/NewReadBE/src" . && \
     rm -rf "Read Me"
 
 # Install dependencies

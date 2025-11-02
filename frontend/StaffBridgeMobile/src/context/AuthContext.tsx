@@ -181,6 +181,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Normalize user object from backend to match mobile app format
+  const normalizeUser = (backendUser: any): User => {
+    // Handle id - backend may return 'id' or '_id'
+    const userId = backendUser.id || backendUser._id || '';
+    
+    // Handle name fields
+    let firstName = backendUser.firstName || '';
+    let lastName = backendUser.lastName || '';
+    
+    // If we have fullName but not firstName/lastName, parse it
+    if (backendUser.fullName && (!firstName || !lastName)) {
+      const nameParts = backendUser.fullName.trim().split(' ');
+      firstName = nameParts[0] || '';
+      lastName = nameParts.slice(1).join(' ') || '';
+    }
+    
+    // Handle organization - backend returns object, mobile expects string or object
+    const organization = backendUser.organization?._id 
+      ? backendUser.organization._id.toString()
+      : backendUser.organization || '';
+    
+    // Normalize user object
+    return {
+      id: userId.toString(),
+      _id: userId.toString(), // Keep _id for compatibility
+      email: backendUser.email || '',
+      firstName: firstName,
+      lastName: lastName,
+      role: backendUser.role || 'staff',
+      department: backendUser.department || '',
+      position: backendUser.position || '',
+      employeeId: backendUser.employeeId || '',
+      phoneNumber: backendUser.phoneNumber || backendUser.phone,
+      profilePicture: backendUser.profileImage || backendUser.profilePicture,
+      permissions: backendUser.permissions || [],
+      isActive: backendUser.status === 'active' || backendUser.isActive || true,
+      createdAt: backendUser.createdAt || new Date().toISOString(),
+      updatedAt: backendUser.updatedAt || new Date().toISOString(),
+      organization: organization,
+      // Include raw organization object for reference
+      organizationObj: backendUser.organization
+    } as User;
+  };
+
   const login = async (email: string, password: string) => {
     try {
       dispatch({ type: 'AUTH_START' });
@@ -188,20 +232,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await apiService.login(email, password);
       console.log('AuthContext: Login response:', data);
       if (data.success) {
-        const user = data.user;
-        // Map fullName to firstName and lastName if needed
-        if (user.fullName && (!user.firstName || !user.lastName)) {
-          const [firstName, ...rest] = user.fullName.split(' ');
-          user.firstName = firstName;
-          user.lastName = rest.join(' ');
-        }
+        // Normalize user object from backend response
+        const normalizedUser = normalizeUser(data.user);
+        
+        console.log('AuthContext: Normalized user:', normalizedUser);
+        
         await Promise.all([
           SecureStore.setItemAsync('auth_token', data.token),
-          AsyncStorage.setItem('user_data', JSON.stringify(user)),
+          AsyncStorage.setItem('user_data', JSON.stringify(normalizedUser)),
         ]);
         dispatch({
           type: 'AUTH_SUCCESS',
-          payload: { user, token: data.token },
+          payload: { user: normalizedUser, token: data.token },
         });
         Alert.alert('Login Successful', 'Welcome back!');
       } else {
