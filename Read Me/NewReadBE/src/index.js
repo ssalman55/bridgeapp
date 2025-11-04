@@ -142,7 +142,8 @@ app.use('/api/auth/login', loginLimiter);
 
 // DEBUG: Log ALL incoming requests to catch callback
 app.use((req, res, next) => {
-  if (req.url.includes('/sso/callback') || req.url.includes('/callback')) {
+  // Log callback-related requests with extra detail
+  if (req.url.includes('/sso/callback') || req.url.includes('/callback') || req.query?.code || req.query?.state) {
     console.log('🚨 === INCOMING REQUEST DEBUG ===');
     console.log('🚨 URL:', req.url);
     console.log('🚨 Original URL:', req.originalUrl);
@@ -150,6 +151,8 @@ app.use((req, res, next) => {
     console.log('🚨 Query:', req.query);
     console.log('🚨 Has code:', !!req.query?.code);
     console.log('🚨 Has state:', !!req.query?.state);
+    console.log('🚨 State value:', req.query?.state);
+    console.log('🚨 User-Agent:', req.get('User-Agent'));
   }
   next();
 });

@@ -433,6 +433,168 @@ exports.handleSSOCallback = async (req, res) => {
 };
 
 /**
+ * Handle SSO callback from frontend (when Azure AD redirects to frontend instead of backend)
+ * This endpoint processes OAuth code/state and returns token for mobile apps
+ */
+exports.handleMobileCallback = async (req, res) => {
+  try {
+    console.log('🔵 === MOBILE CALLBACK FROM FRONTEND ===');
+    console.log('🔵 Request body:', req.body);
+    
+    const { code, state } = req.body;
+
+    if (!code || !state) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing authorization code or state'
+      });
+    }
+
+    // Retrieve stored OAuth state from database
+    console.log('Looking for state:', state);
+    const dbState = await OAuthState.findAndConsumeState(state);
+    
+    if (!dbState) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OAuth state'
+      });
+    }
+
+    console.log('Found OAuth state in database:', {
+      platform: dbState.platform,
+      email: dbState.email,
+      provider: dbState.provider
+    });
+
+    const oauthState = {
+      state: dbState.state,
+      nonce: dbState.nonce,
+      codeVerifier: dbState.codeVerifier,
+      email: dbState.email,
+      provider: dbState.provider,
+      organizationId: dbState.organizationId,
+      platform: dbState.platform || 'web',
+      timestamp: dbState.createdAt.getTime()
+    };
+
+    // Check if state is expired (5 minutes)
+    if (Date.now() - oauthState.timestamp > 5 * 60 * 1000) {
+      return res.status(400).json({
+        success: false,
+        message: 'OAuth state has expired'
+      });
+    }
+
+    const { email, provider, organizationId, codeVerifier } = oauthState;
+
+    // Get SSO configuration
+    const ssoConfig = await SSOConfig.findOne({ organization: organizationId });
+    const providerConfig = ssoConfig.getProviderConfig(provider);
+
+    // Exchange code for tokens
+    let tokens;
+    if (provider === 'microsoft') {
+      tokens = await ssoService.exchangeMicrosoftCode(
+        code,
+        codeVerifier,
+        providerConfig.redirectUri,
+        providerConfig
+      );
+    } else if (provider === 'google') {
+      tokens = await ssoService.exchangeGoogleCode(
+        code,
+        codeVerifier,
+        providerConfig.redirectUri,
+        providerConfig
+      );
+    }
+
+    // Get user information from IdP
+    let idpUserInfo;
+    if (provider === 'microsoft') {
+      idpUserInfo = await ssoService.getMicrosoftUserInfo(tokens.accessToken);
+      if (tokens.idToken) {
+        const verifiedToken = await ssoService.verifyMicrosoftIdToken(
+          tokens.idToken,
+          providerConfig
+        );
+        idpUserInfo = { ...idpUserInfo, ...verifiedToken };
+      }
+    } else if (provider === 'google') {
+      idpUserInfo = await ssoService.getGoogleUserInfo(tokens.accessToken);
+      if (tokens.idToken) {
+        const verifiedToken = await ssoService.verifyGoogleIdToken(
+          tokens.idToken,
+          providerConfig
+        );
+        idpUserInfo = { ...idpUserInfo, ...verifiedToken };
+      }
+    }
+
+    // Validate email matches
+    if (idpUserInfo.email !== email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email mismatch between OAuth state and IdP response'
+      });
+    }
+
+    // Find or create user
+    const user = await ssoService.findOrCreateUser(
+      organizationId,
+      idpUserInfo,
+      provider,
+      ssoConfig
+    );
+
+    // Create SSO authentication record
+    const ssoAuth = await ssoService.createSSOAuth(
+      organizationId,
+      user._id,
+      provider,
+      tokens,
+      idpUserInfo,
+      state,
+      oauthState.nonce,
+      codeVerifier,
+      req
+    );
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        userId: user._id,
+        email: user.email,
+        organization: user.organization,
+        role: user.role,
+        ssoSessionId: ssoAuth._id,
+        provider: provider
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Mobile callback processed successfully');
+    console.log('✅ Platform:', oauthState.platform);
+    console.log('✅ Returning token for mobile app');
+
+    // Return token (frontend will redirect to mobile app)
+    res.json({
+      success: true,
+      token,
+      platform: oauthState.platform
+    });
+  } catch (error) {
+    console.error('Mobile callback error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to process mobile callback'
+    });
+  }
+};
+
+/**
  * Get SSO configuration for the current user's organization
  */
 exports.getSSOConfig = async (req, res) => {

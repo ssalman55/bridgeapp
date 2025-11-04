@@ -17,6 +17,7 @@ router.use((req, res, next) => {
 router.post('/discover', ssoController.discoverOrganization);
 router.post('/initiate', ssoController.initiateSSO);
 router.get('/callback', ssoController.handleSSOCallback);
+router.post('/mobile-callback', ssoController.handleMobileCallback); // New endpoint for frontend mobile callbacks
 router.post('/break-glass-login', ssoController.breakGlassLogin);
 
 // Protected routes (authentication required)
