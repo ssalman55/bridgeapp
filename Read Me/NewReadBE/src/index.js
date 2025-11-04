@@ -175,6 +175,9 @@ app.use('/api/mobile', mobileAuthRoutes);
 app.use('/api/sso', (req, res, next) => {
   console.log(`[INDEX] SSO route matched: ${req.method} ${req.originalUrl}`);
   console.log(`[INDEX] SSO route path: ${req.path}`);
+  console.log(`[INDEX] SSO route query:`, req.query);
+  console.log(`[INDEX] SSO route has code:`, !!req.query?.code);
+  console.log(`[INDEX] SSO route has state:`, !!req.query?.state);
   next();
 }, ssoRoutes);
 
