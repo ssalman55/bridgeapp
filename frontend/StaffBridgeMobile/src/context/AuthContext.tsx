@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import { User, AuthState, AuthAction } from '../types/auth';
 import apiService from '../services/api';
 import { Alert } from 'react-native';
@@ -356,9 +357,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const { authUrl } = ssoData.data;
-      
-      // Import expo-web-browser dynamically to avoid issues if not installed
-      const WebBrowser = require('expo-web-browser').default;
       
       // Configure redirect URI - backend should redirect to custom scheme
       // For mobile, we use custom URL scheme: staffbridge://sso-callback

@@ -33,6 +33,11 @@ const oauthStateSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  platform: {
+    type: String,
+    enum: ['web', 'mobile'],
+    default: 'web'
+  },
   createdAt: {
     type: Date,
     default: Date.now,
