@@ -26,19 +26,29 @@ class ApiService {
     // Request interceptor to add auth token
     this.api.interceptors.request.use(
       async (config) => {
-        // Don't add token to login/register endpoints
-        const isAuthEndpoint = config.url?.includes('/mobile/login') || 
-                               config.url?.includes('/auth/login') || 
-                               config.url?.includes('/auth/register');
+        // Don't add token to public endpoints (login, register, SSO discovery/initiate)
+        const url = config.url || '';
+        const isPublicEndpoint = 
+          url.includes('/mobile/login') || 
+          url.includes('/auth/login') || 
+          url.includes('/auth/register') ||
+          url.includes('/sso/discover') ||
+          url.includes('/sso/initiate') ||
+          url.includes('/sso/callback') ||
+          url.includes('/sso/break-glass-login');
         
-        if (!isAuthEndpoint) {
+        console.log('[API Interceptor] Request URL:', url, '| Is Public:', isPublicEndpoint);
+        
+        if (!isPublicEndpoint) {
           const token = await SecureStore.getItemAsync('auth_token');
-          console.log('Using token:', token); // Debug log
+          console.log('[API Interceptor] Using token:', token ? 'YES' : 'NO');
           if (token) {
             config.headers.Authorization = `Bearer ${token}`;
           }
         } else {
-          console.log('Auth endpoint - not adding token');
+          console.log('[API Interceptor] Public endpoint - not adding token');
+          // Explicitly remove Authorization header if present
+          delete config.headers.Authorization;
         }
         return config;
       },
@@ -53,12 +63,16 @@ class ApiService {
       async (error) => {
         const originalRequest = error.config;
         
-        // Don't attempt token refresh for auth endpoints (login/register)
-        const isAuthEndpoint = originalRequest.url?.includes('/mobile/login') || 
-                               originalRequest.url?.includes('/auth/login') || 
-                               originalRequest.url?.includes('/auth/register');
+        // Don't attempt token refresh for public endpoints (login/register/SSO)
+        const isPublicEndpoint = 
+          originalRequest.url?.includes('/mobile/login') || 
+          originalRequest.url?.includes('/auth/login') || 
+          originalRequest.url?.includes('/auth/register') ||
+          originalRequest.url?.includes('/sso/discover') ||
+          originalRequest.url?.includes('/sso/initiate') ||
+          originalRequest.url?.includes('/sso/callback');
 
-        if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+        if (error.response?.status === 401 && !originalRequest._retry && !isPublicEndpoint) {
           originalRequest._retry = true;
 
           try {
@@ -81,9 +95,9 @@ class ApiService {
               await this.logout();
             }
           } catch (refreshError) {
-            // Refresh failed, clear auth but don't auto-logout on login endpoints
+            // Refresh failed, clear auth but don't auto-logout on public endpoints
             console.error('Token refresh failed:', refreshError);
-            if (!isAuthEndpoint) {
+            if (!isPublicEndpoint) {
               await this.logout();
             }
           }
@@ -773,26 +787,59 @@ class ApiService {
   async discoverSSOOrganization(email: string) {
     try {
       const response = await this.api.post('/sso/discover', { email });
-      console.log('[API] SSO Discovery response:', response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error('[API] SSO Discovery error:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
-      });
+      console.log('[API] SSO Discovery response status:', response.status);
+      console.log('[API] SSO Discovery response data:', JSON.stringify(response.data, null, 2));
       
-      // Return error details instead of null for better debugging
-      if (error.response?.status === 404) {
+      // Check if response is an error (404, etc.)
+      // Note: axios is configured with validateStatus: (status) => status < 500
+      // So 4xx errors don't throw, they return a response with error status
+      if (response.status === 404 || (response.data && !response.data.success)) {
+        const errorMessage = response.data?.message || 'No SSO configuration found for this email domain';
+        console.log('[API] SSO Discovery returned error:', errorMessage);
         return {
           success: false,
-          error: error.response?.data?.message || 'No SSO configuration found'
+          message: errorMessage,
+          error: errorMessage
         };
       }
       
-      // Re-throw other errors
-      throw error;
+      // Success case
+      if (response.data && response.data.success) {
+        console.log('[API] SSO Discovery successful:', response.data);
+        return response.data;
+      }
+      
+      // Unexpected response format
+      console.warn('[API] SSO Discovery unexpected response format:', response.data);
+      return {
+        success: false,
+        message: 'Unexpected response format from server',
+        error: 'Unexpected response format from server'
+      };
+    } catch (error: any) {
+      console.error('[API] SSO Discovery exception:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        fullError: error
+      });
+      
+      // Handle network errors or 5xx errors
+      if (error.response?.data) {
+        return {
+          success: false,
+          message: error.response.data.message || error.response.data.error || 'Failed to discover SSO configuration',
+          error: error.response.data.message || error.response.data.error || 'Failed to discover SSO configuration'
+        };
+      }
+      
+      // Network error
+      return {
+        success: false,
+        message: 'Network error. Please check your connection and try again.',
+        error: 'Network error. Please check your connection and try again.'
+      };
     }
   }
 

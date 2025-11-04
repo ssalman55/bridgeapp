@@ -45,9 +45,14 @@ const LoginScreen: React.FC = () => {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // SSO state
+  const [showSSOFlow, setShowSSOFlow] = useState(false);
+  const [ssoEmail, setSsoEmail] = useState('');
   const [isDiscoveringSSO, setIsDiscoveringSSO] = useState(false);
   const [ssoDiscovery, setSsoDiscovery] = useState<SSODiscovery | null>(null);
   const [isSSOLoading, setIsSSOLoading] = useState(false);
+  const [ssoError, setSsoError] = useState('');
 
   const { login, loginWithSSO } = useAuth();
   const { theme } = useTheme();
@@ -57,33 +62,51 @@ const LoginScreen: React.FC = () => {
     return emailRegex.test(email);
   };
 
-  // Discover SSO providers when email changes
+  // Discover SSO providers when SSO email changes
   const discoverSSO = useCallback(async (emailValue: string) => {
     if (!emailValue || !validateEmail(emailValue)) {
       setSsoDiscovery(null);
+      setSsoError('');
       return;
     }
 
     setIsDiscoveringSSO(true);
+    setSsoError('');
     try {
       console.log('[SSO Discovery] Checking SSO for email:', emailValue);
       const discovery = await apiService.discoverSSOOrganization(emailValue);
-      console.log('[SSO Discovery] Response:', discovery);
+      console.log('[SSO Discovery] Full Response:', JSON.stringify(discovery, null, 2));
       
-      if (discovery?.success && discovery?.data?.availableProviders?.length > 0) {
-        console.log('[SSO Discovery] Found providers:', discovery.data.availableProviders);
+      // Check if discovery was successful
+      if (discovery?.success === true && discovery?.data?.availableProviders?.length > 0) {
+        console.log('[SSO Discovery] ✅ Found providers:', discovery.data.availableProviders);
         setSsoDiscovery(discovery.data);
+        setSsoError('');
       } else {
-        console.log('[SSO Discovery] No providers found or SSO not configured');
+        // Handle failed discovery
+        console.log('[SSO Discovery] ❌ Failed:', {
+          success: discovery?.success,
+          message: discovery?.message,
+          error: discovery?.error,
+          hasData: !!discovery?.data,
+          providersCount: discovery?.data?.availableProviders?.length
+        });
         setSsoDiscovery(null);
+        // Show the actual error message from backend
+        let errorMsg = discovery?.message || discovery?.error || 'No SSO configured for this email domain';
+        
+        // Special handling for authentication errors (backend misconfiguration)
+        if (errorMsg.includes('Not authorized') || errorMsg.includes('no token provided')) {
+          errorMsg = 'SSO discovery endpoint requires authentication. Please contact your administrator to fix the backend configuration.';
+        }
+        
+        setSsoError(errorMsg);
       }
     } catch (error: any) {
-      // SSO not configured for this organization, which is fine
-      console.log('[SSO Discovery] Error (this is normal if SSO not configured):', 
-        error.response?.status, 
-        error.response?.data?.message || error.message
-      );
+      console.error('[SSO Discovery] Exception:', error);
       setSsoDiscovery(null);
+      const errorMsg = error?.message || error.response?.data?.message || 'Unable to check SSO configuration. Please try again.';
+      setSsoError(errorMsg);
     } finally {
       setIsDiscoveringSSO(false);
     }
@@ -91,21 +114,23 @@ const LoginScreen: React.FC = () => {
 
   // Debounce SSO discovery
   useEffect(() => {
+    if (!showSSOFlow) return;
+    
     const timeoutId = setTimeout(() => {
-      if (email.trim()) {
-        discoverSSO(email.trim());
+      if (ssoEmail.trim()) {
+        discoverSSO(ssoEmail.trim());
       } else {
         setSsoDiscovery(null);
+        setSsoError('');
       }
-    }, 500); // Wait 500ms after user stops typing
+    }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [email, discoverSSO]);
+  }, [ssoEmail, showSSOFlow, discoverSSO]);
 
   const validateForm = () => {
     let isValid = true;
 
-    // Validate email
     if (!email.trim()) {
       setEmailError('Email is required');
       isValid = false;
@@ -116,7 +141,6 @@ const LoginScreen: React.FC = () => {
       setEmailError('');
     }
 
-    // Validate password
     if (!password.trim()) {
       setPasswordError('Password is required');
       isValid = false;
@@ -148,9 +172,23 @@ const LoginScreen: React.FC = () => {
     }
   };
 
+  const handleSSOFlowStart = () => {
+    setShowSSOFlow(true);
+    setSsoEmail('');
+    setSsoDiscovery(null);
+    setSsoError('');
+  };
+
+  const handleSSOFlowCancel = () => {
+    setShowSSOFlow(false);
+    setSsoEmail('');
+    setSsoDiscovery(null);
+    setSsoError('');
+  };
+
   const handleSSOLogin = async (provider: 'microsoft' | 'google') => {
-    if (!email.trim() || !validateEmail(email.trim())) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address first.');
+    if (!ssoEmail.trim() || !validateEmail(ssoEmail.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
     }
 
@@ -161,9 +199,10 @@ const LoginScreen: React.FC = () => {
 
     setIsSSOLoading(true);
     try {
-      await loginWithSSO(email.trim(), provider, ssoDiscovery.organization.id);
+      await loginWithSSO(ssoEmail.trim(), provider, ssoDiscovery.organization.id);
+      // Reset SSO flow on success
+      handleSSOFlowCancel();
     } catch (error) {
-      // Error is already handled in AuthContext
       console.error('SSO login error:', error);
     } finally {
       setIsSSOLoading(false);
@@ -203,75 +242,115 @@ const LoginScreen: React.FC = () => {
 
         <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
           <Card.Content style={styles.cardContent}>
-            <TextInput
-              label="Email Address"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (emailError) setEmailError('');
-              }}
-              mode="outlined"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              error={!!emailError}
-              style={styles.input}
-              theme={theme}
-              right={
-                isDiscoveringSSO ? (
-                  <TextInput.Icon icon={() => <ActivityIndicator size="small" color={theme.colors.primary} />} />
-                ) : undefined
-              }
-            />
-            <HelperText type="error" visible={!!emailError}>
-              {emailError}
-            </HelperText>
+            {/* SSO Flow */}
+            {showSSOFlow ? (
+              <View>
+                <Text style={[styles.ssoTitle, { color: theme.colors.primary }]}>
+                  Sign in with SSO
+                </Text>
+                <Paragraph style={[styles.ssoSubtitle, { color: theme.colors.textSecondary }]}>
+                  Enter your work email to continue
+                </Paragraph>
 
-            {/* SSO Providers Section */}
-            {ssoDiscovery && ssoDiscovery.availableProviders.length > 0 && (
-              <View style={styles.ssoSection}>
-                {ssoDiscovery.availableProviders.map((provider) => (
-                  <Button
-                    key={provider.provider}
-                    mode="outlined"
-                    onPress={() => handleSSOLogin(provider.provider)}
-                    disabled={isSSOLoading || isLoading}
-                    loading={isSSOLoading && provider.provider === ssoDiscovery.availableProviders[0]?.provider}
-                    style={styles.ssoButton}
-                    contentStyle={styles.ssoButtonContent}
-                    icon={getProviderIcon(provider.provider)}
-                    theme={theme}
-                  >
-                    Sign in with {getProviderName(provider.provider)}
-                  </Button>
-                ))}
-                {!ssoDiscovery.ssoOnly && (
-                  <>
-                    <View style={styles.dividerContainer}>
-                      <Divider style={styles.divider} />
-                      <Text style={[styles.dividerText, { color: theme.colors.textSecondary }]}>
-                        Or continue with email
-                      </Text>
-                      <Divider style={styles.divider} />
-                    </View>
-                  </>
+                <TextInput
+                  label="Email Address"
+                  value={ssoEmail}
+                  onChangeText={(text) => {
+                    setSsoEmail(text);
+                    setSsoError('');
+                  }}
+                  mode="outlined"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                  theme={theme}
+                  right={
+                    isDiscoveringSSO ? (
+                      <TextInput.Icon icon={() => <ActivityIndicator size="small" color={theme.colors.primary} />} />
+                    ) : undefined
+                  }
+                />
+
+                {ssoError && (
+                  <HelperText type="error" visible={!!ssoError}>
+                    {ssoError}
+                  </HelperText>
                 )}
+
+                {/* SSO Providers */}
+                {ssoDiscovery && ssoDiscovery.availableProviders.length > 0 && (
+                  <View style={styles.ssoProvidersContainer}>
+                    {ssoDiscovery.availableProviders.map((provider) => (
+                      <Button
+                        key={provider.provider}
+                        mode="contained"
+                        onPress={() => handleSSOLogin(provider.provider)}
+                        disabled={isSSOLoading || isDiscoveringSSO}
+                        loading={isSSOLoading}
+                        style={[styles.ssoProviderButton, { backgroundColor: theme.colors.primary }]}
+                        contentStyle={styles.ssoProviderButtonContent}
+                        icon={getProviderIcon(provider.provider)}
+                        theme={theme}
+                      >
+                        Continue with {getProviderName(provider.provider)}
+                      </Button>
+                    ))}
+                  </View>
+                )}
+
+                {/* Back button */}
+                <Button
+                  mode="text"
+                  onPress={handleSSOFlowCancel}
+                  style={styles.backButton}
+                  theme={theme}
+                >
+                  Back to email/password login
+                </Button>
               </View>
-            )}
+            ) : (
+              /* Regular Login Flow */
+              <View>
+                {/* SSO Button - Prominent */}
+                <Button
+                  mode="contained"
+                  onPress={handleSSOFlowStart}
+                  style={[styles.ssoMainButton, { backgroundColor: theme.colors.primary }]}
+                  contentStyle={styles.ssoMainButtonContent}
+                  icon="shield-check"
+                  theme={theme}
+                >
+                  Sign in with SSO
+                </Button>
 
-            {/* Debug info - Remove in production */}
-            {__DEV__ && email.trim() && (
-              <HelperText type="info" visible={true} style={styles.debugInfo}>
-                {isDiscoveringSSO 
-                  ? 'Checking for SSO...' 
-                  : ssoDiscovery 
-                    ? `SSO found: ${ssoDiscovery.availableProviders.length} provider(s)` 
-                    : 'No SSO configured for this email domain'}
-              </HelperText>
-            )}
+                <View style={styles.dividerContainer}>
+                  <Divider style={styles.divider} />
+                  <Text style={[styles.dividerText, { color: theme.colors.textSecondary }]}>
+                    Or continue with email
+                  </Text>
+                  <Divider style={styles.divider} />
+                </View>
 
-            {(!ssoDiscovery || !ssoDiscovery.ssoOnly) && (
-              <>
+                <TextInput
+                  label="Email Address"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (emailError) setEmailError('');
+                  }}
+                  mode="outlined"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={!!emailError}
+                  style={styles.input}
+                  theme={theme}
+                />
+                <HelperText type="error" visible={!!emailError}>
+                  {emailError}
+                </HelperText>
+
                 <TextInput
                   label="Password"
                   value={password}
@@ -299,14 +378,14 @@ const LoginScreen: React.FC = () => {
                   mode="contained"
                   onPress={handleLogin}
                   loading={isLoading}
-                  disabled={isLoading || isSSOLoading}
+                  disabled={isLoading}
                   style={styles.loginButton}
                   contentStyle={styles.loginButtonContent}
                   theme={theme}
                 >
                   {isLoading ? 'Signing In...' : 'Sign In'}
                 </Button>
-              </>
+              </View>
             )}
           </Card.Content>
         </Card>
@@ -353,7 +432,7 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 24,
-    borderRadius: 16, // More rounded corners for elegant look
+    borderRadius: 16,
     elevation: 3,
     shadowColor: '#1A202C',
     shadowOffset: { width: 0, height: 2 },
@@ -369,7 +448,7 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     marginTop: 16,
-    borderRadius: 12, // More rounded button
+    borderRadius: 12,
     elevation: 2,
   },
   loginButtonContent: {
@@ -386,16 +465,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  ssoSection: {
+  // SSO Styles
+  ssoTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  ssoSubtitle: {
+    fontSize: 14,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  ssoMainButton: {
+    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  ssoMainButtonContent: {
+    paddingVertical: 8,
+  },
+  ssoProvidersContainer: {
+    marginTop: 24,
     marginBottom: 16,
   },
-  ssoButton: {
+  ssoProviderButton: {
     marginBottom: 12,
     borderRadius: 12,
-    borderWidth: 1.5,
+    elevation: 2,
   },
-  ssoButtonContent: {
+  ssoProviderButtonContent: {
     paddingVertical: 8,
+  },
+  backButton: {
+    marginTop: 16,
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -409,10 +512,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     fontSize: 14,
   },
-  debugInfo: {
-    marginTop: 8,
-    fontSize: 12,
-  },
 });
 
-export default LoginScreen; 
+export default LoginScreen;
