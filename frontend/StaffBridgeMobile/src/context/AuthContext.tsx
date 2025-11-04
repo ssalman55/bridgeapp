@@ -344,6 +344,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Helper function to extract token from URL
+  const extractTokenFromUrl = (url: string | null): string | null => {
+    if (!url) return null;
+    
+    try {
+      const urlObj = new URL(url);
+      return urlObj.searchParams.get('token');
+    } catch (urlError) {
+      // If URL parsing fails, try manual parsing for custom schemes
+      const match = url.match(/[?&]token=([^&]+)/);
+      if (match) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+    return null;
+  };
+
+  // Helper function to complete SSO login with token
+  const completeSSOLogin = async (token: string) => {
+    const loginData = await apiService.completeSSOLogin(token);
+    
+    if (loginData.success) {
+      // Fetch full user profile to get signed URL for profile image
+      let userWithSignedUrl = loginData.user;
+      try {
+        const profileResponse = await apiService.getProfile();
+        if (profileResponse?.success && profileResponse?.data?.user) {
+          console.log('AuthContext: Fetched user profile with signed URL:', profileResponse.data.user);
+          userWithSignedUrl = profileResponse.data.user;
+        }
+      } catch (profileError) {
+        console.warn('AuthContext: Could not fetch user profile, using SSO response:', profileError);
+      }
+      
+      // Normalize user object
+      const normalizedUser = normalizeUser(userWithSignedUrl);
+      
+      await Promise.all([
+        SecureStore.setItemAsync('auth_token', loginData.token),
+        AsyncStorage.setItem('user_data', JSON.stringify(normalizedUser)),
+      ]);
+      
+      dispatch({
+        type: 'AUTH_SUCCESS',
+        payload: { user: normalizedUser, token: loginData.token },
+      });
+      
+      Alert.alert('Login Successful', 'Welcome back!');
+    } else {
+      throw new Error('Failed to complete SSO login');
+    }
+  };
+
   const loginWithSSO = async (email: string, provider: 'microsoft' | 'google', organizationId: string) => {
     try {
       dispatch({ type: 'AUTH_START' });
@@ -368,67 +421,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         redirectUri
       );
 
-      console.log('AuthContext: SSO browser result:', result);
+      console.log('🔵 AuthContext: SSO browser result type:', result.type);
+      console.log('🔵 AuthContext: SSO browser result URL:', result.url);
+      console.log('🔵 AuthContext: Full result object:', JSON.stringify(result, null, 2));
 
+      // Handle successful callback (custom scheme redirect)
       if (result.type === 'success' && result.url) {
-        // Extract token from callback URL
-        // Handle both custom scheme (staffbridge://sso-callback?token=...) 
-        // and web redirect (https://domain.com/sso-callback?token=...)
-        let token: string | null = null;
+        console.log('✅ SSO callback received successfully');
+        console.log('🔍 Analyzing callback URL:', result.url);
         
-        try {
-          const url = new URL(result.url);
-          token = url.searchParams.get('token');
-        } catch (urlError) {
-          // If URL parsing fails, try manual parsing for custom schemes
-          const match = result.url.match(/[?&]token=([^&]+)/);
-          if (match) {
-            token = decodeURIComponent(match[1]);
-          }
+        // Check if it's a custom scheme redirect
+        if (result.url.startsWith('staffbridge://')) {
+          console.log('✅ Custom scheme detected: staffbridge://');
+        } else if (result.url.includes('stfbridge.com') || result.url.includes('sso-callback')) {
+          console.log('⚠️ Web URL detected instead of custom scheme');
+          console.log('⚠️ Backend redirected to web instead of mobile app');
         }
         
-        if (!token) {
+        // Extract token and complete login
+        const token = extractTokenFromUrl(result.url);
+        if (token) {
+          await completeSSOLogin(token);
+        } else {
           throw new Error('No token received from SSO callback');
         }
-
-        // Complete login with token
-        const loginData = await apiService.completeSSOLogin(token);
+      } 
+      // Handle case where browser stays open (backend redirected to web)
+      else if (result.url && (result.url.includes('stfbridge.com') || result.url.includes('sso-callback') || result.url.includes('dashboard'))) {
+        console.log('❌ Backend redirected to web URL instead of custom scheme');
+        console.log('❌ Result type:', result.type);
+        console.log('❌ Callback URL:', result.url);
         
-        if (loginData.success) {
-          // Fetch full user profile to get signed URL for profile image
-          let userWithSignedUrl = loginData.user;
-          try {
-            const profileResponse = await apiService.getProfile();
-            if (profileResponse?.success && profileResponse?.data?.user) {
-              console.log('AuthContext: Fetched user profile with signed URL:', profileResponse.data.user);
-              userWithSignedUrl = profileResponse.data.user;
-            }
-          } catch (profileError) {
-            console.warn('AuthContext: Could not fetch user profile, using SSO response:', profileError);
-          }
-          
-          // Normalize user object
-          const normalizedUser = normalizeUser(userWithSignedUrl);
-          
-          await Promise.all([
-            SecureStore.setItemAsync('auth_token', loginData.token),
-            AsyncStorage.setItem('user_data', JSON.stringify(normalizedUser)),
-          ]);
-          
-          dispatch({
-            type: 'AUTH_SUCCESS',
-            payload: { user: normalizedUser, token: loginData.token },
-          });
-          
-          Alert.alert('Login Successful', 'Welcome back!');
+        // Try to extract token from web URL (in case backend included it)
+        const token = extractTokenFromUrl(result.url);
+        if (token) {
+          console.log('✅ Token found in web URL, attempting login');
+          await completeSSOLogin(token);
         } else {
-          throw new Error('Failed to complete SSO login');
+          dispatch({ type: 'AUTH_FAILURE', payload: 'Backend redirected to web interface instead of mobile app. Please check backend configuration.' });
+          Alert.alert(
+            'Redirect Error', 
+            'The backend redirected to the web interface instead of the mobile app. Please contact your administrator to fix the backend SSO callback configuration.'
+          );
         }
-      } else if (result.type === 'cancel') {
+      }
+      // Handle cancellation
+      else if (result.type === 'cancel') {
         dispatch({ type: 'AUTH_FAILURE', payload: 'SSO login cancelled' });
         Alert.alert('Login Cancelled', 'You cancelled the SSO login process.');
-      } else {
-        throw new Error('SSO authentication failed');
+      } 
+      // Handle other errors
+      else {
+        console.log('⚠️ SSO result type:', result.type);
+        console.log('⚠️ SSO result URL:', result.url);
+        console.log('⚠️ Full result:', JSON.stringify(result, null, 2));
+        dispatch({ type: 'AUTH_FAILURE', payload: `SSO authentication failed. Result type: ${result.type}` });
+        Alert.alert('Login Failed', `SSO authentication failed. Result type: ${result.type}. Please try again.`);
       }
     } catch (error: any) {
       console.error('AuthContext: SSO login error:', error);

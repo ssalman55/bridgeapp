@@ -140,6 +140,20 @@ app.use(session({
 // Apply login rate limiter only to login route
 app.use('/api/auth/login', loginLimiter);
 
+// DEBUG: Log ALL incoming requests to catch callback
+app.use((req, res, next) => {
+  if (req.url.includes('/sso/callback') || req.url.includes('/callback')) {
+    console.log('🚨 === INCOMING REQUEST DEBUG ===');
+    console.log('🚨 URL:', req.url);
+    console.log('🚨 Original URL:', req.originalUrl);
+    console.log('🚨 Method:', req.method);
+    console.log('🚨 Query:', req.query);
+    console.log('🚨 Has code:', !!req.query?.code);
+    console.log('🚨 Has state:', !!req.query?.state);
+  }
+  next();
+});
+
 // Apply global subscription middleware to all API routes except auth, billing, and SSO
 app.use('/api', (req, res, next) => {
   // Skip subscription check for auth routes, billing/payment routes, and SSO routes
