@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-const LEAVE_TYPES = [
+// Default leave types (fallback if API fails)
+const DEFAULT_LEAVE_TYPES = [
   { label: 'Annual', icon: 'calendar-blank' },
   { label: 'Sick', icon: 'emoticon-sick-outline' },
   { label: 'Maternity', icon: 'baby-face-outline' },
@@ -34,7 +35,10 @@ const LeaveRequestScreen: React.FC = () => {
   const { theme } = useTheme();
   const navigation = useNavigation();
   const { state: authState } = useAuth();
-  const [leaveType, setLeaveType] = useState('Annual');
+  const [leaveTypes, setLeaveTypes] = useState<Array<{ _id: string; name: string; icon?: string; color?: string }>>([]);
+  const [leaveTypeName, setLeaveTypeName] = useState<string>('');
+  const [leaveTypeId, setLeaveTypeId] = useState<string>('');
+  const [loadingLeaveTypes, setLoadingLeaveTypes] = useState(true);
   const [startDateObj, setStartDateObj] = useState<Date | null>(null);
   const [endDateObj, setEndDateObj] = useState<Date | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -44,6 +48,45 @@ const LeaveRequestScreen: React.FC = () => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [success, setSuccess] = useState(false);
 
+  // Fetch active leave types from backend
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      setLoadingLeaveTypes(true);
+      try {
+        const types = await apiService.getActiveLeaveTypes();
+        if (Array.isArray(types) && types.length > 0) {
+          setLeaveTypes(types);
+          // Set default to first leave type
+          setLeaveTypeName(types[0].name);
+          setLeaveTypeId(types[0]._id);
+        } else {
+          // Fallback to default types if API returns empty
+          setLeaveTypes(DEFAULT_LEAVE_TYPES.map(t => ({ _id: t.label, name: t.label, icon: t.icon })));
+          setLeaveTypeName(DEFAULT_LEAVE_TYPES[0].label);
+          setLeaveTypeId(DEFAULT_LEAVE_TYPES[0].label);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch leave types, using defaults:', error);
+        // Fallback to default types
+        setLeaveTypes(DEFAULT_LEAVE_TYPES.map(t => ({ _id: t.label, name: t.label, icon: t.icon })));
+        setLeaveTypeName(DEFAULT_LEAVE_TYPES[0].label);
+        setLeaveTypeId(DEFAULT_LEAVE_TYPES[0].label);
+      } finally {
+        setLoadingLeaveTypes(false);
+      }
+    };
+    fetchLeaveTypes();
+  }, []);
+
+  // Get icon for leave type
+  const getLeaveTypeIcon = (name: string) => {
+    const type = leaveTypes.find(t => t.name === name);
+    if (type?.icon) return type.icon;
+    // Fallback to default icons
+    const defaultType = DEFAULT_LEAVE_TYPES.find(t => t.label === name);
+    return defaultType?.icon || 'calendar-blank';
+  };
+
   const calcTotalDays = () => {
     if (!startDateObj || !endDateObj) return '';
     const diff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -52,7 +95,7 @@ const LeaveRequestScreen: React.FC = () => {
 
   const validate = () => {
     const errs: { [key: string]: string } = {};
-    if (!leaveType) errs.leaveType = 'Leave type is required.';
+    if (!leaveTypeId) errs.leaveType = 'Leave type is required.';
     if (!startDateObj) errs.startDate = 'Start date is required.';
     if (!endDateObj) errs.endDate = 'End date is required.';
     if (startDateObj && endDateObj && endDateObj < startDateObj) errs.endDate = 'End date must be after start date.';
@@ -66,8 +109,9 @@ const LeaveRequestScreen: React.FC = () => {
     if (!validate()) return;
     setSubmitting(true);
     try {
+      // Send leaveTypeId (ObjectId) instead of leaveTypeName (string)
       await apiService.requestLeave({
-        leaveType: leaveType,
+        leaveType: leaveTypeId, // Send ObjectId
         startDate: startDateObj ? startDateObj.toISOString().split('T')[0] : '',
         endDate: endDateObj ? endDateObj.toISOString().split('T')[0] : '',
         reason: reason.trim(),
@@ -79,7 +123,7 @@ const LeaveRequestScreen: React.FC = () => {
         navigation.navigate('LeaveHistory' as never);
       }, 1500);
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to submit leave request.');
+      Alert.alert('Error', error?.response?.data?.message || error?.message || 'Failed to submit leave request.');
     } finally {
       setSubmitting(false);
     }
@@ -98,22 +142,37 @@ const LeaveRequestScreen: React.FC = () => {
           </View>
           <View style={{ flexDirection: 'row', marginBottom: spacing.sm }}>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <TouchableOpacity style={[styles.dropdown, ...(errors.leaveType ? [styles.inputError] : [])]} onPress={() => setShowStartPicker(false)}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Icon name={LEAVE_TYPES.find(t => t.label === leaveType)?.icon || 'calendar-blank'} size={20} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={{ color: theme.colors.text }}>{leaveType}</Text>
+              {loadingLeaveTypes ? (
+                <View style={[styles.dropdown, { justifyContent: 'center' }]}>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
                 </View>
-              </TouchableOpacity>
-              {/* Dropdown options */}
-              <View style={styles.dropdownOptionsContainer}>
-                {LEAVE_TYPES.map(type => (
-                  <TouchableOpacity key={type.label} style={styles.dropdownOption} onPress={() => setLeaveType(type.label)}>
-                    <Icon name={type.icon} size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                    <Text style={{ color: theme.colors.text }}>{type.label}</Text>
+              ) : (
+                <>
+                  <TouchableOpacity style={[styles.dropdown, ...(errors.leaveType ? [styles.inputError] : [])]} onPress={() => setShowStartPicker(false)}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Icon name={getLeaveTypeIcon(leaveTypeName)} size={20} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={{ color: theme.colors.text }}>{leaveTypeName || 'Select Leave Type'}</Text>
+                    </View>
                   </TouchableOpacity>
-                ))}
-              </View>
-              {errors.leaveType && <Text style={styles.errorText}>{errors.leaveType}</Text>}
+                  {/* Dropdown options */}
+                  <View style={styles.dropdownOptionsContainer}>
+                    {leaveTypes.map(type => (
+                      <TouchableOpacity 
+                        key={type._id} 
+                        style={styles.dropdownOption} 
+                        onPress={() => {
+                          setLeaveTypeName(type.name);
+                          setLeaveTypeId(type._id);
+                        }}
+                      >
+                        <Icon name={getLeaveTypeIcon(type.name)} size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={{ color: theme.colors.text }}>{type.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {errors.leaveType && <Text style={styles.errorText}>{errors.leaveType}</Text>}
+                </>
+              )}
             </View>
             <View style={{ flex: 1, marginLeft: 8 }}>
               <TextInput

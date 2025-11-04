@@ -9,12 +9,14 @@ const { authenticateToken } = require('../middleware/auth');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user._id;
+    const limit = parseInt(req.query.limit) || 20; // Default to 20, but allow higher limits
+    
     const notifications = await Notification.find({ 
       recipient: userId,
       organization: req.user.organization 
     })
       .sort({ timestamp: -1 })
-      .limit(20);
+      .limit(limit);
     res.json(notifications);
   } catch (err) {
     console.error('Error fetching notifications:', err);
@@ -59,6 +61,23 @@ router.post('/read-all', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error marking all notifications as read:', err);
     res.status(500).json({ message: 'Failed to mark all notifications as read', error: err.message });
+  }
+});
+
+// Get unread notification count
+router.get('/count', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const orgId = req.user.organization;
+    const count = await Notification.countDocuments({ 
+      recipient: userId, 
+      organization: orgId, 
+      read: false 
+    });
+    res.json(count);
+  } catch (err) {
+    console.error('Error fetching notification count:', err);
+    res.status(500).json({ message: 'Failed to fetch notification count', error: err.message });
   }
 });
 

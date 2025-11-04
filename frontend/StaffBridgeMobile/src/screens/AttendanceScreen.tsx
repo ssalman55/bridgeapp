@@ -119,17 +119,122 @@ const AttendanceScreen: React.FC = () => {
 
   const getCurrentLocation = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required to mark attendance.');
+      // Check if location services are enabled
+      const locationEnabled = await Location.hasServicesEnabledAsync();
+      if (!locationEnabled) {
+        Alert.alert(
+          'Location Services Disabled',
+          'Location services are disabled on your device. Please enable location services in your device settings to mark attendance.\n\nSince geofencing is enabled, location is required for attendance check-in.',
+          [{ text: 'OK' }]
+        );
         return null;
       }
 
-      const currentLocation = await Location.getCurrentPositionAsync({});
-      return currentLocation;
-    } catch (error) {
+      // Request location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Permission Required',
+          'Location permission is required for check-in, especially when geofencing is enabled. Please grant location permission in your device settings.',
+          [{ text: 'OK' }]
+        );
+        return null;
+      }
+
+      // Get current location with progressive accuracy and retry logic
+      let currentLocation;
+      let lastError: any = null;
+      
+      // Strategy: Try multiple accuracy levels, starting with lowest (fastest, most likely to work)
+      const accuracyLevels = [
+        Location.Accuracy.Lowest,      // Fastest, least accurate (good for initial fix)
+        Location.Accuracy.Low,        // Low accuracy
+        Location.Accuracy.Balanced,   // Balanced (default)
+      ];
+      
+      // First, try to get last known position as a fallback
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync({
+          maximumAge: 60000, // Accept up to 1 minute old
+        });
+        if (lastKnown && lastKnown.coords) {
+          console.log('Using last known position:', {
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+            accuracy: lastKnown.coords.accuracy
+          });
+          return lastKnown;
+        }
+      } catch (err) {
+        console.log('Last known position not available, will try fresh location');
+      }
+      
+      // If we don't have location yet, try getting fresh location with progressive accuracy
+      for (let accuracyIndex = 0; accuracyIndex < accuracyLevels.length; accuracyIndex++) {
+        const accuracy = accuracyLevels[accuracyIndex];
+        const maxRetries = 2; // 2 retries per accuracy level
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`Location attempt ${attempt}/${maxRetries} with accuracy: ${Location.Accuracy[accuracy] || accuracy}`);
+            
+            currentLocation = await Location.getCurrentPositionAsync({
+              accuracy: accuracy,
+              timeout: accuracy === Location.Accuracy.Lowest ? 10000 : 20000, // Lower accuracy gets shorter timeout
+              maximumAge: accuracy === Location.Accuracy.Lowest ? 30000 : 10000, // Accept older locations for lower accuracy
+            });
+            
+            if (currentLocation && currentLocation.coords) {
+              console.log('Location retrieved successfully:', {
+                latitude: currentLocation.coords.latitude,
+                longitude: currentLocation.coords.longitude,
+                accuracy: currentLocation.coords.accuracy,
+                accuracyLevel: Location.Accuracy[accuracy] || accuracy
+              });
+              return currentLocation;
+            }
+          } catch (locationError: any) {
+            lastError = locationError;
+            console.warn(`Location attempt ${attempt} failed with accuracy ${Location.Accuracy[accuracy] || accuracy}:`, locationError?.message);
+            
+            // If not the last attempt for this accuracy level, wait before retrying
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+            }
+          }
+        }
+        
+        // If we got location, break out of accuracy loop
+        if (currentLocation && currentLocation.coords) {
+          break;
+        }
+        
+        // Wait before trying next accuracy level
+        if (accuracyIndex < accuracyLevels.length - 1) {
+          console.log('Trying next accuracy level...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      // If all retries failed
+      const errorMessage = lastError?.message || 'Unable to get your location after multiple attempts';
+      console.error('Location error after retries:', lastError);
+      
+      Alert.alert(
+        'Location Unavailable',
+        `${errorMessage}\n\nPlease ensure:\n• Location services are enabled in device settings\n• GPS/Wi-Fi location is turned on\n• You're in an area with good signal\n• Try moving to an area with better GPS reception`,
+        [{ text: 'OK' }]
+      );
+      return null;
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Unable to get your current location';
       console.error('Error getting location:', error);
-      Alert.alert('Location Error', 'Unable to get your current location.');
+      
+      Alert.alert(
+        'Location Unavailable',
+        `${errorMessage}\n\nPlease ensure:\n• Location services are enabled\n• GPS/Wi-Fi location is turned on\n• You're in an area with good signal\n• Try again in a few seconds`,
+        [{ text: 'OK' }]
+      );
       return null;
     }
   };

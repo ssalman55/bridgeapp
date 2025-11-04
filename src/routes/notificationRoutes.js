@@ -7,12 +7,14 @@ const { authenticateToken, authorizeAdmin } = require('../middleware/auth');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user._id;
+    const limit = parseInt(req.query.limit) || 20; // Default to 20, but allow higher limits
+    
     const notifications = await Notification.find({ 
       recipient: userId,
       organization: req.user.organization 
     })
       .sort({ timestamp: -1 })
-      .limit(20);
+      .limit(limit);
     res.json(notifications);
   } catch (err) {
     console.error('Error fetching notifications:', err);

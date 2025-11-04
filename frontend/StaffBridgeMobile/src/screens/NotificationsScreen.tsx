@@ -16,6 +16,7 @@ const NotificationsScreen: React.FC = () => {
   useEffect(() => {
     (async () => {
       setLoading(true);
+      // Fetch all notifications without limit
       await refreshNotifications();
       setLoading(false);
     })();
@@ -183,12 +184,12 @@ const NotificationsScreen: React.FC = () => {
     }
   };
 
-  const filteredNotifications = notifications.filter(n => {
+  const filteredNotifications = Array.isArray(notifications) ? notifications.filter(n => {
     if (filter === 'all') return true;
     if (filter === 'unread') return !n.read;
     if (filter === 'read') return n.read;
     return true;
-  });
+  }) : [];
 
   // Debug log to see notifications structure
   useEffect(() => {

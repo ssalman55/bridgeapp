@@ -11,10 +11,12 @@ class ApiService {
   constructor() {
     this.api = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 10000,
+      timeout: 30000, // Increased to 30 seconds for slow connections
       headers: {
         'Content-Type': 'application/json',
       },
+      // Add adapter configuration for better network error handling
+      validateStatus: (status) => status < 500, // Don't throw on 4xx errors
     });
 
     this.setupInterceptors();
@@ -100,22 +102,62 @@ class ApiService {
     ]);
   }
 
+  // Test backend connectivity
+  async testConnection(): Promise<boolean> {
+    try {
+      // Try a simple health check or get endpoint
+      await this.api.get('/auth/profile', { timeout: 5000 });
+      return true;
+    } catch (error: any) {
+      // Even if auth fails, if we get a 401, the server is reachable
+      return error.response?.status === 401 || error.response?.status === 403;
+    }
+  }
+
   // Auth endpoints
   async login(email: string, password: string) {
     try {
       console.log('Login request:', { email, passwordLength: password?.length });
-      const response = await this.api.post('/mobile/login', { email, password });
+      console.log('API Base URL:', API_BASE_URL);
+      
+      // Try the request with extended timeout
+      const response = await this.api.post('/mobile/login', { email, password }, {
+        timeout: 30000,
+      });
       console.log('Login response success:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('Login error details:', {
-        status: error.response?.status,
+      const status = error.response?.status;
+      const errorCode = error.code;
+      
+      // Enhanced error details for network issues
+      const errorDetails = {
+        status: status,
         statusText: error.response?.statusText,
         data: error.response?.data,
         message: error.message,
+        code: errorCode, // 'ECONNABORTED', 'ERR_NETWORK', etc.
         url: error.config?.url,
-        baseURL: error.config?.baseURL
-      });
+        baseURL: error.config?.baseURL,
+        timeout: error.config?.timeout
+      };
+      
+      // Check for network-specific errors
+      if (errorCode === 'ERR_NETWORK' || errorCode === 'ECONNABORTED' || !status) {
+        console.error('Login error (network issue):', errorDetails);
+        // Create a more helpful error message
+        const networkError = new Error('Unable to connect to server. Please check your internet connection and try again.');
+        (networkError as any).isNetworkError = true;
+        (networkError as any).code = errorCode;
+        throw networkError;
+      }
+      
+      // Use console.warn for expected client errors (4xx), console.error only for server errors (5xx)
+      if (status && status >= 500) {
+        console.error('Login error (server error):', errorDetails);
+      } else {
+        console.warn('Login error (client error):', errorDetails);
+      }
       throw error;
     }
   }
@@ -126,7 +168,8 @@ class ApiService {
   }
 
   async getProfile() {
-    const response = await this.api.get('/auth/profile');
+    // Use /auth/me endpoint which returns signed URLs for profile images
+    const response = await this.api.get('/auth/me');
     return response.data;
   }
 
@@ -150,7 +193,13 @@ class ApiService {
       const response = await this.api.post('/attendance/checkout');
       return response.data;
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Check-out failed');
+      const errorMessage = error.response?.data?.message || error.message || 'Check-out failed';
+      console.error('Check-out error:', {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      throw new Error(errorMessage);
     }
   }
 
@@ -204,7 +253,15 @@ class ApiService {
 
   async getLeaveHistory() {
     const response = await this.api.get('/leave/my');
-    return response.data;
+    // Backend populates leaveType as an object with { name, color, icon, documentThreshold }
+    // Map to string for mobile compatibility
+    const leaves = Array.isArray(response.data) ? response.data : [];
+    return leaves.map((leave: any) => ({
+      ...leave,
+      leaveType: typeof leave.leaveType === 'object' && leave.leaveType?.name 
+        ? leave.leaveType.name 
+        : leave.leaveType || 'Unknown'
+    }));
   }
 
   async cancelLeaveRequest(id: string) {
@@ -212,14 +269,56 @@ class ApiService {
     return response.data;
   }
 
-  // Payroll endpoints
-  async getPayslips(params?: { month?: string; year?: string }) {
-    const response = await this.api.get('/payroll/my', { params });
+  // Leave Types endpoints
+  async getActiveLeaveTypes() {
+    const response = await this.api.get('/leave-types/active');
     return response.data;
   }
 
+  async getUserLeaveBalances() {
+    const response = await this.api.get('/leave-types/user-balances');
+    return response.data;
+  }
+
+  // Payroll endpoints
+  async getPayslips(params?: { month?: string; year?: string }) {
+    const response = await this.api.get('/payroll/my', { params });
+    // Map backend field names to mobile-compatible format
+    // Backend salaryStructure: { basic, transport, housing, utility, bonus, reimbursements }
+    // Mobile expects: { basicPay, travelAllowance, housingAllowance, utilityAllowance }
+    const payslips = Array.isArray(response.data) ? response.data : [];
+    return payslips.map((payslip: any) => ({
+      ...payslip,
+      salaryStructure: payslip.salaryStructure ? {
+        ...payslip.salaryStructure,
+        basicPay: payslip.salaryStructure.basic || payslip.salaryStructure.basicPay,
+        travelAllowance: payslip.salaryStructure.transport || payslip.salaryStructure.travelAllowance,
+        housingAllowance: payslip.salaryStructure.housing || payslip.salaryStructure.housingAllowance,
+        utilityAllowance: payslip.salaryStructure.utility || payslip.salaryStructure.utilityAllowance,
+        bonus: payslip.salaryStructure.bonus || payslip.bonuses || payslip.bonus,
+        reimbursements: payslip.salaryStructure.reimbursements || payslip.reimbursements
+      } : payslip.salaryStructure
+    }));
+  }
+
   async getPayslip(id: string) {
-    const response = await this.api.get(`/payroll/payslips/${id}`);
+    const response = await this.api.get(`/payroll/${id}/payslip`);
+    // Map backend field names to mobile-compatible format
+    const payslip = response.data;
+    if (payslip && payslip.salaryStructure) {
+      return {
+        ...payslip,
+        salaryStructure: {
+          ...payslip.salaryStructure,
+          basicPay: payslip.salaryStructure.basic || payslip.salaryStructure.basicPay,
+          travelAllowance: payslip.salaryStructure.transport || payslip.salaryStructure.travelAllowance,
+          housingAllowance: payslip.salaryStructure.housing || payslip.salaryStructure.housingAllowance,
+          utilityAllowance: payslip.salaryStructure.utility || payslip.salaryStructure.utilityAllowance,
+          bonus: payslip.salaryStructure.bonus || payslip.bonuses || payslip.bonus,
+          reimbursements: payslip.salaryStructure.reimbursements || payslip.reimbursements
+        }
+      };
+    }
     return response.data;
   }
 
@@ -231,7 +330,18 @@ class ApiService {
   // Bulletin endpoints
   async getBulletins(params?: { page?: number; limit?: number }) {
     const response = await this.api.get('/bulletin', { params });
-    return response.data;
+    // Backend returns array directly with createdAt field and populated createdBy
+    // Map fields for mobile compatibility:
+    // - createdAt -> postedDate
+    // - createdBy.fullName -> postedBy (string)
+    // - body -> content
+    const bulletins = Array.isArray(response.data) ? response.data : [];
+    return bulletins.map((bulletin: any) => ({
+      ...bulletin,
+      postedDate: bulletin.createdAt || bulletin.postedDate,
+      postedBy: bulletin.createdBy?.fullName || (typeof bulletin.createdBy === 'object' && bulletin.createdBy ? bulletin.createdBy.fullName : null) || bulletin.postedBy || 'Admin',
+      content: bulletin.body || bulletin.content // Backend uses 'body', mobile expects 'content'
+    }));
   }
 
   async getBulletin(id: string) {
@@ -319,8 +429,24 @@ class ApiService {
 
   // Notification endpoints
   async getNotifications(params?: { page?: number; limit?: number }) {
-    const response = await this.api.get('/notifications', { params });
-    return response.data;
+    try {
+      // Don't pass limit to backend if not specified, or use a high limit
+      // Backend defaults to 20, but we want all notifications
+      const requestParams = params?.limit ? params : { ...params, limit: 100 };
+      const response = await this.api.get('/notifications', { params: requestParams });
+      // Ensure we return an array
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && Array.isArray(data.notifications)) {
+        return data.notifications;
+      } else {
+        return [];
+      }
+    } catch (error: any) {
+      console.warn('Error fetching notifications:', error);
+      return [];
+    }
   }
 
   async markNotificationAsRead(id: string) {
@@ -334,8 +460,21 @@ class ApiService {
   }
 
   async getNotificationCount() {
-    const response = await this.api.get('/notifications/count');
-    return response.data;
+    try {
+      const response = await this.api.get('/notifications/count');
+      const data = response.data;
+      // Return count as number
+      if (typeof data === 'number') {
+        return data;
+      } else if (data && typeof data.count === 'number') {
+        return data.count;
+      } else {
+        return 0;
+      }
+    } catch (error: any) {
+      console.warn('Error fetching notification count:', error);
+      return 0;
+    }
   }
 
   // File upload helper
@@ -354,10 +493,17 @@ class ApiService {
 
   // Peer Recognitions endpoints
   async getPeerRecognitions(limit: number = 3) {
-    const response = await this.api.get('/recognitions', { params: { status: 'approved' } });
-    // Sort and limit client-side in case backend does not support limit param
-    return Array.isArray(response.data)
-      ? response.data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit)
+    const response = await this.api.get('/recognitions', { params: { status: 'approved', limit: limit } });
+    // Backend returns { recognitions: [...], total, page, limit, pages }
+    // Extract recognitions array from response
+    const recognitions = response.data?.recognitions || response.data || [];
+    // Ensure we have an array and sort by createdAt descending
+    return Array.isArray(recognitions)
+      ? recognitions.sort((a: any, b: any) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        }).slice(0, limit)
       : [];
   }
 
@@ -407,7 +553,17 @@ class ApiService {
   // Event endpoints
   async getEvents() {
     const response = await this.api.get('/events');
-    return response.data;
+    // Backend returns { events: [...], pagination: {...} }
+    // Extract events array and map date fields for mobile compatibility
+    // Backend uses startsAt/endsAt, mobile expects start/end
+    const events = response.data?.events || response.data || [];
+    return Array.isArray(events) 
+      ? events.map((event: any) => ({
+          ...event,
+          start: event.startsAt || event.start,
+          end: event.endsAt || event.end
+        }))
+      : [];
   }
 
   // Staff Directory endpoint
@@ -416,14 +572,268 @@ class ApiService {
     return response.data;
   }
 
+  // Get all staff with attendance status
+  async getAllStaffAttendanceStatus() {
+    try {
+      const response = await this.api.get('/attendance/all-staff-status');
+      return response.data;
+    } catch (error: any) {
+      console.warn('Error fetching staff attendance status:', error);
+      // Fallback to regular staff directory if attendance endpoint fails
+      return await this.getStaffDirectory();
+    }
+  }
+
   async getSystemSettings() {
     const response = await this.api.get('/settings');
     return response.data;
   }
 
-  async createPeerRecognition(data: { submitter: string; recognized: string; comment: string; organization: string; }) {
-    const response = await this.api.post('/recognitions', data);
+  async createPeerRecognition(data: { submitter?: string; recognized: string; comment: string; organization?: string; }) {
+    // Backend gets submitter from req.user._id automatically, so we only need to send recognized and comment
+    const payload = {
+      recognized: data.recognized,
+      comment: data.comment
+    };
+    const response = await this.api.post('/recognitions', payload);
     return response.data;
+  }
+
+  // Helpdesk endpoints
+  async getHelpdeskTickets(params?: { status?: string; priority?: string; category?: string; search?: string; page?: number; limit?: number }) {
+    const response = await this.api.get('/helpdesk/tickets', { params });
+    // Backend returns { tickets: [...], total, page, limit, pages }
+    return response.data;
+  }
+
+  async getHelpdeskTicket(id: string) {
+    const response = await this.api.get(`/helpdesk/tickets/${id}`);
+    return response.data;
+  }
+
+  async createHelpdeskTicket(data: { title: string; description: string; category: string; subcategory?: string; priority?: string; tags?: string[] }, attachments?: any[]) {
+    const formData = new FormData();
+    formData.append('title', data.title);
+    formData.append('description', data.description);
+    formData.append('category', data.category);
+    if (data.subcategory) formData.append('subcategory', data.subcategory);
+    if (data.priority) formData.append('priority', data.priority);
+    if (data.tags && data.tags.length > 0) {
+      formData.append('tags', JSON.stringify(data.tags));
+    }
+    if (attachments && attachments.length > 0) {
+      attachments.forEach((file, index) => {
+        // React Native FormData expects file objects with uri, type, and name
+        formData.append('attachments', {
+          uri: file.uri,
+          type: file.type || 'application/octet-stream',
+          name: file.name || `attachment_${index}.${file.uri.split('.').pop()}`
+        } as any);
+      });
+    }
+    // For React Native, don't set Content-Type header - let the network layer handle it with boundary
+    const response = await this.api.post('/helpdesk/tickets', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      transformRequest: () => formData, // Prevent Axios from transforming FormData
+    });
+    return response.data;
+  }
+
+  async addTicketComment(ticketId: string, comment: string, isInternal: boolean = false) {
+    const response = await this.api.post(`/helpdesk/tickets/${ticketId}/comments`, { content: comment, isInternal });
+    return response.data;
+  }
+
+  async closeTicket(ticketId: string) {
+    const response = await this.api.patch(`/helpdesk/tickets/${ticketId}/close`);
+    return response.data;
+  }
+
+  async getHelpdeskCategories() {
+    const response = await this.api.get('/helpdesk/categories');
+    return response.data;
+  }
+
+  // Knowledge Base endpoints
+  async getKnowledgeArticles(params?: { category?: string; type?: string; search?: string; featured?: boolean; page?: number; limit?: number }) {
+    const response = await this.api.get('/helpdesk/knowledge', { params });
+    // Backend returns { articles: [...], total, page, limit, pages }
+    return response.data;
+  }
+
+  async getKnowledgeArticle(id: string) {
+    const response = await this.api.get(`/helpdesk/knowledge/${id}`);
+    return response.data;
+  }
+
+  async getFeaturedKnowledgeArticles() {
+    const response = await this.api.get('/helpdesk/knowledge/featured');
+    return response.data;
+  }
+
+  async searchKnowledgeArticles(searchQuery: string) {
+    const response = await this.api.get('/helpdesk/knowledge/search', { params: { search: searchQuery } });
+    return response.data;
+  }
+
+  async rateKnowledgeArticle(articleId: string, helpful: boolean) {
+    const response = await this.api.post(`/helpdesk/knowledge/${articleId}/rate`, { helpful });
+    return response.data;
+  }
+
+  // Official Letters endpoints
+  async getLetterTemplates(params?: { category?: string }) {
+    const response = await this.api.get('/letter-templates', { params });
+    return response.data;
+  }
+
+  async getMyLetterRequests(params?: { status?: string; page?: number; limit?: number }) {
+    const response = await this.api.get('/letter-requests/my', { params });
+    // Backend returns { requests, pagination }
+    return response.data?.requests || response.data || [];
+  }
+
+  async createLetterRequest(data: {
+    template: string;
+    employee?: string;
+    requestMessage?: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    isUrgent?: boolean;
+    dueDate?: string;
+    customData?: any;
+  }) {
+    try {
+      console.log('[API] Creating letter request:', data);
+      const response = await this.api.post('/letter-requests', data);
+      console.log('[API] Letter request created successfully:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('[API] Error creating letter request:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  async downloadLetterDocument(requestId: string) {
+    const response = await this.api.get(`/letter-requests/${requestId}/download`);
+    return response.data; // Returns { downloadUrl, fileName, fileSize, mimeType }
+  }
+
+  // Profile image signed URL endpoint
+  async getProfileImageSignedUrl(s3Key: string) {
+    try {
+      // URL encode the S3 key to handle special characters
+      const encodedS3Key = encodeURIComponent(s3Key);
+      const response = await this.api.get(`/auth/profile-image/${encodedS3Key}`);
+      return response.data?.signedUrl || null;
+    } catch (error: any) {
+      console.warn('Error fetching profile image signed URL:', error);
+      return null;
+    }
+  }
+
+  // Organization Documents endpoints
+  async getOrganizationDocuments(params?: { 
+    category?: string; 
+    status?: string; 
+    search?: string; 
+    page?: number; 
+    limit?: number 
+  }) {
+    const response = await this.api.get('/organization-documents', { params });
+    // Backend returns { documents: [...], pagination: { page, limit, total, pages } }
+    return response.data;
+  }
+
+  async getOrganizationDocument(id: string) {
+    const response = await this.api.get(`/organization-documents/${id}`);
+    return response.data;
+  }
+
+  async downloadOrganizationDocument(id: string) {
+    const response = await this.api.get(`/organization-documents/${id}/download`);
+    return response.data; // Returns { downloadUrl, fileName, fileSize, mimeType }
+  }
+
+  async getOrganizationDocumentStats() {
+    const response = await this.api.get('/organization-documents/stats');
+    return response.data;
+  }
+
+  async getOrganizationDocumentCategories() {
+    const response = await this.api.get('/organization-documents/categories');
+    return response.data;
+  }
+
+  // SSO endpoints
+  /**
+   * Discover organization by email domain for SSO
+   */
+  async discoverSSOOrganization(email: string) {
+    try {
+      const response = await this.api.post('/sso/discover', { email });
+      console.log('[API] SSO Discovery response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('[API] SSO Discovery error:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      // Return error details instead of null for better debugging
+      if (error.response?.status === 404) {
+        return {
+          success: false,
+          error: error.response?.data?.message || 'No SSO configuration found'
+        };
+      }
+      
+      // Re-throw other errors
+      throw error;
+    }
+  }
+
+  /**
+   * Initiate SSO login flow
+   */
+  async initiateSSO(email: string, provider: 'microsoft' | 'google', organizationId: string) {
+    try {
+      const response = await this.api.post('/sso/initiate', {
+        email,
+        provider,
+        organizationId,
+        platform: 'mobile' // Indicate this is a mobile app request
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to initiate SSO login');
+    }
+  }
+
+  /**
+   * Complete SSO login by exchanging callback token
+   * This is called after the OAuth callback redirects back to the app
+   */
+  async completeSSOLogin(token: string) {
+    try {
+      // The token is already a JWT from the backend callback
+      // We just need to verify it and get user profile
+      const response = await this.api.get('/auth/me', {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return {
+        success: true,
+        token,
+        user: response.data.user || response.data
+      };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to complete SSO login');
+    }
   }
 }
 

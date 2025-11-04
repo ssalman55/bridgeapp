@@ -8,6 +8,7 @@ import { Alert } from 'react-native';
 interface AuthContextType {
   state: AuthState;
   login: (email: string, password: string) => Promise<void>;
+  loginWithSSO: (email: string, provider: 'microsoft' | 'google', organizationId: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (user: Partial<User>) => void;
   refreshToken: () => Promise<void>;
@@ -166,11 +167,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         const user = JSON.parse(userData);
-        console.log('AuthContext: Dispatching AUTH_SUCCESS');
-        dispatch({
-          type: 'AUTH_SUCCESS',
-          payload: { user, token },
-        });
+        
+        // Refresh user profile to get latest data including signed URLs for profile images
+        try {
+          const profileResponse = await apiService.getProfile();
+          if (profileResponse?.success && profileResponse?.data?.user) {
+            console.log('AuthContext: Refreshed user profile on load with signed URL:', profileResponse.data.user.profileImage?.substring(0, 50));
+            const refreshedUser = normalizeUser(profileResponse.data.user);
+            await AsyncStorage.setItem('user_data', JSON.stringify(refreshedUser));
+            console.log('AuthContext: Dispatching AUTH_SUCCESS with refreshed user');
+            dispatch({
+              type: 'AUTH_SUCCESS',
+              payload: { user: refreshedUser, token },
+            });
+          } else {
+            // Fallback to stored user if refresh fails
+            console.log('AuthContext: Dispatching AUTH_SUCCESS with stored user');
+            dispatch({
+              type: 'AUTH_SUCCESS',
+              payload: { user, token },
+            });
+          }
+        } catch (profileError) {
+          console.warn('AuthContext: Could not refresh profile on load, using stored user:', profileError);
+          // Use stored user data if refresh fails
+          console.log('AuthContext: Dispatching AUTH_SUCCESS with stored user (refresh failed)');
+          dispatch({
+            type: 'AUTH_SUCCESS',
+            payload: { user, token },
+          });
+        }
       } else {
         console.log('AuthContext: Dispatching AUTH_LOGOUT (no token or userData)');
         dispatch({ type: 'AUTH_LOGOUT' });
@@ -229,13 +255,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       dispatch({ type: 'AUTH_START' });
       console.log('AuthContext: Attempting login for:', email);
+      
+      // Test connectivity first
+      console.log('AuthContext: Testing backend connectivity...');
+      const isReachable = await apiService.testConnection();
+      if (!isReachable) {
+        console.warn('AuthContext: Backend server appears unreachable');
+      } else {
+        console.log('AuthContext: Backend server is reachable');
+      }
+      
       const data = await apiService.login(email, password);
       console.log('AuthContext: Login response:', data);
       if (data.success) {
-        // Normalize user object from backend response
-        const normalizedUser = normalizeUser(data.user);
+        // After login, fetch full user profile to get signed URL for profile image
+        let userWithSignedUrl = data.user;
+        try {
+          const profileResponse = await apiService.getProfile();
+          if (profileResponse?.success && profileResponse?.data?.user) {
+            console.log('AuthContext: Fetched user profile with signed URL:', profileResponse.data.user);
+            userWithSignedUrl = profileResponse.data.user;
+          }
+        } catch (profileError) {
+          console.warn('AuthContext: Could not fetch user profile, using login response:', profileError);
+          // Continue with login response user data
+        }
+        
+        // Normalize user object from backend response (may have signed URL now)
+        const normalizedUser = normalizeUser(userWithSignedUrl);
         
         console.log('AuthContext: Normalized user:', normalizedUser);
+        console.log('AuthContext: Profile image value:', normalizedUser.profilePicture || normalizedUser.profileImage);
         
         await Promise.all([
           SecureStore.setItemAsync('auth_token', data.token),
@@ -254,18 +304,143 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         Alert.alert('Login Failed', data.message || 'Login failed');
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || 'Login failed';
-      console.error('AuthContext: Login error:', {
-        message: errorMessage,
-        status: error.response?.status,
-        data: error.response?.data,
-        fullError: error
-      });
+      let errorMessage = error.response?.data?.message || error.message || 'Login failed';
+      const status = error.response?.status;
+      const isNetworkError = error.isNetworkError || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || !status;
+      
+      // Handle network errors with user-friendly messages
+      if (isNetworkError) {
+        errorMessage = 'Unable to connect to server. Please check your internet connection and try again. If the problem persists, the server may be temporarily unavailable.';
+      }
+      
+      // Use console.warn for expected errors (401, 400) to avoid showing them as critical errors
+      // Only use console.error for unexpected server errors (500+) and network errors
+      if (status && status >= 500) {
+        console.error('AuthContext: Server error during login:', {
+          message: errorMessage,
+          status: status,
+          code: error.code,
+        });
+      } else if (isNetworkError) {
+        console.error('AuthContext: Network error during login:', {
+          message: errorMessage,
+          code: error.code,
+          url: error.config?.url,
+          baseURL: error.config?.baseURL,
+        });
+      } else {
+        console.warn('AuthContext: Login failed:', {
+          message: errorMessage,
+          status: status,
+        });
+      }
+      
       dispatch({
         type: 'AUTH_FAILURE',
         payload: errorMessage,
       });
       Alert.alert('Login Failed', errorMessage);
+    }
+  };
+
+  const loginWithSSO = async (email: string, provider: 'microsoft' | 'google', organizationId: string) => {
+    try {
+      dispatch({ type: 'AUTH_START' });
+      console.log('AuthContext: Attempting SSO login for:', email, 'with provider:', provider);
+      
+      // Initiate SSO flow
+      const ssoData = await apiService.initiateSSO(email, provider, organizationId);
+      
+      if (!ssoData.success || !ssoData.data?.authUrl) {
+        throw new Error('Failed to initiate SSO login');
+      }
+
+      const { authUrl } = ssoData.data;
+      
+      // Import expo-web-browser dynamically to avoid issues if not installed
+      const WebBrowser = require('expo-web-browser').default;
+      
+      // Configure redirect URI - backend should redirect to custom scheme
+      // For mobile, we use custom URL scheme: staffbridge://sso-callback
+      const redirectUri = 'staffbridge://sso-callback';
+      
+      // Open OAuth URL in browser
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        redirectUri
+      );
+
+      console.log('AuthContext: SSO browser result:', result);
+
+      if (result.type === 'success' && result.url) {
+        // Extract token from callback URL
+        // Handle both custom scheme (staffbridge://sso-callback?token=...) 
+        // and web redirect (https://domain.com/sso-callback?token=...)
+        let token: string | null = null;
+        
+        try {
+          const url = new URL(result.url);
+          token = url.searchParams.get('token');
+        } catch (urlError) {
+          // If URL parsing fails, try manual parsing for custom schemes
+          const match = result.url.match(/[?&]token=([^&]+)/);
+          if (match) {
+            token = decodeURIComponent(match[1]);
+          }
+        }
+        
+        if (!token) {
+          throw new Error('No token received from SSO callback');
+        }
+
+        // Complete login with token
+        const loginData = await apiService.completeSSOLogin(token);
+        
+        if (loginData.success) {
+          // Fetch full user profile to get signed URL for profile image
+          let userWithSignedUrl = loginData.user;
+          try {
+            const profileResponse = await apiService.getProfile();
+            if (profileResponse?.success && profileResponse?.data?.user) {
+              console.log('AuthContext: Fetched user profile with signed URL:', profileResponse.data.user);
+              userWithSignedUrl = profileResponse.data.user;
+            }
+          } catch (profileError) {
+            console.warn('AuthContext: Could not fetch user profile, using SSO response:', profileError);
+          }
+          
+          // Normalize user object
+          const normalizedUser = normalizeUser(userWithSignedUrl);
+          
+          await Promise.all([
+            SecureStore.setItemAsync('auth_token', loginData.token),
+            AsyncStorage.setItem('user_data', JSON.stringify(normalizedUser)),
+          ]);
+          
+          dispatch({
+            type: 'AUTH_SUCCESS',
+            payload: { user: normalizedUser, token: loginData.token },
+          });
+          
+          Alert.alert('Login Successful', 'Welcome back!');
+        } else {
+          throw new Error('Failed to complete SSO login');
+        }
+      } else if (result.type === 'cancel') {
+        dispatch({ type: 'AUTH_FAILURE', payload: 'SSO login cancelled' });
+        Alert.alert('Login Cancelled', 'You cancelled the SSO login process.');
+      } else {
+        throw new Error('SSO authentication failed');
+      }
+    } catch (error: any) {
+      console.error('AuthContext: SSO login error:', error);
+      const errorMessage = error.message || 'SSO login failed. Please try again.';
+      dispatch({
+        type: 'AUTH_FAILURE',
+        payload: errorMessage,
+      });
+      Alert.alert('SSO Login Failed', errorMessage);
+      throw error;
     }
   };
 
@@ -312,6 +487,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value: AuthContextType = {
     state,
     login,
+    loginWithSSO,
     logout,
     updateProfile,
     refreshToken,

@@ -13,7 +13,8 @@
       "backgroundColor": "#0B4176"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ssalman55.StaffBridgeMobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,8 +22,22 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.ssalman55.StaffBridgeMobile"
+      "package": "com.ssalman55.StaffBridgeMobile",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "staffbridge",
+              "host": "sso-callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
+    "scheme": "staffbridge",
     "web": {
       "favicon": "./assets/favicon.png"
     },

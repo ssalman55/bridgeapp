@@ -40,6 +40,13 @@ import TaskDetailScreen from '../screens/TaskDetailScreen';
 import TrainingRequestScreen from '../screens/TrainingRequestScreen';
 import PayslipScreen from '../screens/PayslipScreen';
 import RecognizePeerScreen from '../screens/RecognizePeerScreen';
+import HelpdeskHistoryScreen from '../screens/HelpdeskHistoryScreen';
+import HelpdeskRequestScreen from '../screens/HelpdeskRequestScreen';
+import HelpdeskTicketDetailScreen from '../screens/HelpdeskTicketDetailScreen';
+import KnowledgeBaseScreen from '../screens/KnowledgeBaseScreen';
+import KnowledgeArticleDetailScreen from '../screens/KnowledgeArticleDetailScreen';
+import OfficialLettersScreen from '../screens/OfficialLettersScreen';
+import DocumentsLibraryScreen from '../screens/DocumentsLibraryScreen';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -62,6 +69,12 @@ export type SubmenuStackParamList = {
   CurrentInventory: undefined;
   Payslip: undefined;
   RecognizePeer: undefined;
+  HelpdeskHistory: undefined;
+  HelpdeskRequest: undefined;
+  HelpdeskTicketDetail: { ticketId: string };
+  KnowledgeBase: undefined;
+  KnowledgeArticleDetail: { articleId: string };
+  OfficialLetters: undefined;
   
   // Tasks submenu
   AssignedTasks: undefined;
@@ -72,7 +85,9 @@ export type SubmenuStackParamList = {
   StaffDirectory: undefined;
   BulletinBoard: undefined;
   MyDocuments: undefined;
+  DocumentsLibrary: undefined;
   Notifications: undefined;
+  KnowledgeBase: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -135,6 +150,38 @@ const SubmenuStackNavigator: React.FC = () => {
         })}
       />
       <Stack.Screen name="Payslip" component={PayslipScreen} />
+      <Stack.Screen 
+        name="HelpdeskHistory" 
+        component={HelpdeskHistoryScreen} 
+        options={({ navigation, route }) => ({
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('HelpdeskRequest' as never)} style={{ marginRight: 12 }} accessibilityLabel="Add new helpdesk request">
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen name="HelpdeskRequest" component={HelpdeskRequestScreen} />
+      <Stack.Screen name="HelpdeskTicketDetail" component={HelpdeskTicketDetailScreen} />
+      <Stack.Screen 
+        name="OfficialLetters" 
+        component={OfficialLettersScreen}
+        options={({ navigation, route }) => ({
+          title: 'Official Letters',
+          headerRight: () => (
+            <TouchableOpacity 
+              onPress={() => {
+                // Open template selection modal
+                navigation.setParams({ openRequestModal: true });
+              }} 
+              style={{ marginRight: 12 }} 
+              accessibilityLabel="Request new letter"
+            >
+              <Icon name="plus" size={26} color="#1976D2" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       {/* Tasks submenu */}
       <Stack.Screen name="AssignedTasks" component={AssignedTasksScreen} />
       <Stack.Screen name="PerformanceEvaluation" component={PerformanceScreen} />
@@ -158,6 +205,9 @@ const SubmenuStackNavigator: React.FC = () => {
       />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="RecognizePeer" component={RecognizePeerScreen} options={{ title: 'Recognize a Peer' }} />
+      <Stack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
+      <Stack.Screen name="KnowledgeArticleDetail" component={KnowledgeArticleDetailScreen} />
+      <Stack.Screen name="DocumentsLibrary" component={DocumentsLibraryScreen} options={{ title: 'Documents Library' }} />
     </Stack.Navigator>
   );
 };
@@ -180,6 +230,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
     let items: { label: string; icon: string; tab?: string; screen?: string; action?: string }[] = [];
     if (modal === 'Requests') {
       items = [
+        { label: 'Helpdesk History', icon: 'help-circle-outline', tab: 'Requests', screen: 'HelpdeskHistory' },
         { label: 'Attendance History', icon: 'history', tab: 'Requests', screen: 'AttendanceHistory' },
         // { label: 'Leave Request', icon: 'calendar-plus', tab: 'Requests', screen: 'LeaveRequest' },
         { label: 'Leave History', icon: 'calendar-clock', tab: 'Requests', screen: 'LeaveHistory' },
@@ -190,6 +241,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         // { label: 'Inventory Request', icon: 'cube-send', tab: 'Requests', screen: 'InventoryRequest' },
         { label: 'Current Inventory', icon: 'cube-outline', tab: 'Requests', screen: 'CurrentInventory' },
         { label: 'Payslip', icon: 'file-document-outline', tab: 'Requests', screen: 'Payslip' },
+        { label: 'Official Letters', icon: 'file-document-edit-outline', tab: 'Requests', screen: 'OfficialLetters' },
       ];
     } else if (modal === 'Tasks') {
       items = [
@@ -201,6 +253,8 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
         { label: 'Staff Directory', icon: 'account-group', tab: 'More', screen: 'StaffDirectory' },
         { label: 'Bulletin Board', icon: 'bullhorn', tab: 'More', screen: 'BulletinBoard' },
         { label: 'My Documents', icon: 'file-document-outline', tab: 'More', screen: 'MyDocuments' },
+        { label: 'Documents Library', icon: 'folder-multiple', tab: 'More', screen: 'DocumentsLibrary' },
+        { label: 'Knowledge Base', icon: 'book-open-page-variant', tab: 'More', screen: 'KnowledgeBase' },
         { label: 'Notifications', icon: 'bell', tab: 'More', screen: 'Notifications' },
         { label: 'Logout', icon: 'logout', action: 'logout' },
       ];
@@ -302,23 +356,72 @@ const TabNavigator: React.FC = () => {
   const navigation = useNavigation();
   const { unreadCount, notifications, markAllAsRead, refreshNotifications } = useNotifications();
   const [notifModalVisible, setNotifModalVisible] = useState(false);
+  
+  // Debug: Log unreadCount changes
+  React.useEffect(() => {
+    console.log('[TabNavigator] unreadCount changed to:', unreadCount);
+    console.log('[TabNavigator] Total notifications:', notifications.length);
+    console.log('[TabNavigator] Unread notifications:', notifications.filter(n => !n.read).length);
+  }, [unreadCount, notifications]);
 
   return (
     <>
       <Tab.Navigator
-        screenOptions={{
-          headerShown: true,
-          headerRight: () => (
-            // @ts-ignore
-            <TouchableOpacity style={{ marginRight: 16 }} onPress={() => setNotifModalVisible(true)}>
-              <Icon name="bell-outline" size={26} color={theme.colors.primary} />
-              {unreadCount > 0 && (
-                <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: 'red', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 }}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ),
+        screenOptions={({ route }) => {
+          // Debug log on every render
+          console.log('[MainNavigator] screenOptions render - unreadCount:', unreadCount);
+          return {
+            headerShown: true,
+            headerRight: () => {
+              // Debug log
+              console.log('[MainNavigator] Rendering bell icon with unreadCount:', unreadCount);
+              console.log('[MainNavigator] Should show badge?', unreadCount > 0);
+              return (
+                // @ts-ignore
+                <TouchableOpacity 
+                  style={{ marginRight: 16, position: 'relative', width: 32, height: 32 }} 
+                  onPress={() => {
+                    console.log('[MainNavigator] Bell icon pressed, unreadCount:', unreadCount);
+                    setNotifModalVisible(true);
+                  }}
+                >
+                  <Icon name="bell-outline" size={26} color={theme.colors.primary} />
+                  {unreadCount > 0 ? (
+                    <View style={{ 
+                      position: 'absolute', 
+                      top: -2, 
+                      right: -2, 
+                      backgroundColor: '#FF3B30', 
+                      borderRadius: 10, 
+                      minWidth: 20, 
+                      height: 20, 
+                      justifyContent: 'center', 
+                      alignItems: 'center', 
+                      paddingHorizontal: 5,
+                      borderWidth: 2,
+                      borderColor: '#fff',
+                      zIndex: 9999,
+                      elevation: 5, // For Android
+                      shadowColor: '#000', // For iOS
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.3,
+                      shadowRadius: 3,
+                    }}>
+                      <Text style={{ 
+                        color: '#fff', 
+                        fontSize: 11, 
+                        fontWeight: 'bold',
+                        textAlign: 'center',
+                        lineHeight: 14,
+                      }}>
+                        {unreadCount > 99 ? '99+' : unreadCount.toString()}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            },
+          };
         }}
         tabBar={props => <CustomTabBar {...props} />}
       >
@@ -337,15 +440,19 @@ const TabNavigator: React.FC = () => {
             </TouchableOpacity>
           </View>
           <ScrollView>
-            {notifications.slice(0, 10).map((notif) => (
-              <TouchableOpacity key={notif._id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderColor: '#eee', backgroundColor: notif.read ? '#fff' : '#E3F2FD' }} onPress={() => {
-                setNotifModalVisible(false);
-                (navigationRef as any).navigate('More', { screen: 'Notifications' });
-              }}>
-                <Text style={{ fontWeight: notif.read ? 'normal' : 'bold', color: '#222' }}>{notif.message}</Text>
-                <Text style={{ color: '#888', fontSize: 12 }}>{new Date(notif.timestamp).toLocaleString()}</Text>
-              </TouchableOpacity>
-            ))}
+            {Array.isArray(notifications) && notifications.length > 0 ? (
+              notifications.slice(0, 10).map((notif) => (
+                <TouchableOpacity key={notif._id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderColor: '#eee', backgroundColor: notif.read ? '#fff' : '#E3F2FD' }} onPress={() => {
+                  setNotifModalVisible(false);
+                  (navigationRef as any).navigate('More', { screen: 'Notifications' });
+                }}>
+                  <Text style={{ fontWeight: notif.read ? 'normal' : 'bold', color: '#222' }}>{notif.message}</Text>
+                  <Text style={{ color: '#888', fontSize: 12 }}>{new Date(notif.timestamp).toLocaleString()}</Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={{ padding: 16, textAlign: 'center', color: '#888' }}>No notifications</Text>
+            )}
           </ScrollView>
           <Button mode="outlined" style={{ marginTop: 16 }} onPress={() => { setNotifModalVisible(false); (navigationRef as any).navigate('More', { screen: 'Notifications' }); }}>View All</Button>
         </View>

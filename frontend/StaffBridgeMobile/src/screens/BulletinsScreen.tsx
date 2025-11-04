@@ -84,8 +84,8 @@ const BulletinsScreen: React.FC = () => {
                     <Text style={styles.icon}>📰</Text>
                     <Text style={[styles.title, { color: theme.colors.primary }]}>{b.title}</Text>
                   </View>
-                  <Text style={styles.date}>{formatDate(b.createdAt)}</Text>
-                  <Text style={styles.body}>{stripHtml(b.body)}</Text>
+                  <Text style={styles.date}>{formatDate(b.postedDate || b.createdAt)}</Text>
+                  <Text style={styles.body}>{stripHtml(b.content || b.body)}</Text>
                 </Card.Content>
               </Card>
             </View>

@@ -222,17 +222,6 @@ exports.createLetterRequest = async (req, res) => {
       return res.status(400).json({ message: 'Invalid or inactive template' });
     }
 
-    // Validate employee exists
-    const employeeDoc = await User.findOne({ 
-      _id: employee, 
-      organization, 
-      status: 'active' 
-    });
-
-    if (!employeeDoc) {
-      return res.status(400).json({ message: 'Invalid employee' });
-    }
-
     // For staff users, automatically set employee to themselves
     if (req.user.role === 'staff') {
       employee = requestedBy; // Force staff to only request for themselves
@@ -246,6 +235,23 @@ exports.createLetterRequest = async (req, res) => {
     // Check if user can request for this employee (staff can only request for themselves)
     if (req.user.role === 'staff' && employee.toString() !== requestedBy.toString()) {
       return res.status(403).json({ message: 'You can only request letters for yourself' });
+    }
+
+    // Validate employee exists
+    const employeeDoc = await User.findOne({ 
+      _id: employee, 
+      organization, 
+      status: 'active' 
+    });
+
+    if (!employeeDoc) {
+      console.error('Employee validation failed:', {
+        employeeId: employee,
+        organization,
+        requestedBy,
+        userRole: req.user.role
+      });
+      return res.status(400).json({ message: 'Invalid employee or employee not found in organization' });
     }
 
     const request = new LetterRequest({
@@ -303,14 +309,14 @@ exports.createLetterRequest = async (req, res) => {
         }).select('_id fullName email');
 
         if (admins.length > 0) {
-          // Create system notifications
-          await Promise.all(admins.map(admin => Notification.create({
+          // Create system notifications using notificationService
+          await Promise.all(admins.map(admin => notificationService.notifyUser({
+            userId: admin._id,
+            organization: organization,
             message: `${employeeDoc.fullName} submitted a letter request for ${templateDoc.name}`,
             type: 'letter',
             link: '/admin/official-letters',
-            recipient: admin._id,
-            sender: requestedBy,
-            organization: organization
+            sender: requestedBy
           })));
           
           // Send emails to admins
@@ -348,10 +354,22 @@ exports.createLetterRequest = async (req, res) => {
       'template', 'category', 'employee', 'requestedBy'
     ], 'name description templateContent placeholders name color icon fullName email department');
 
+    console.log('Letter request created successfully:', {
+      requestNumber: request.requestNumber,
+      template: request.template?.name,
+      employee: request.employee?.fullName,
+      status: request.status,
+      organization: organization
+    });
+
     res.status(201).json(request);
   } catch (error) {
     console.error('Error creating letter request:', error);
-    res.status(500).json({ message: 'Error creating letter request' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Error creating letter request',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

@@ -41,10 +41,15 @@ const CalendarScreen: React.FC = () => {
       try {
         const data = await apiService.getEvents();
         const now = new Date();
+        // Ensure data is an array before filtering
+        const eventsArray = Array.isArray(data) ? data : [];
         // Filter events: current month and upcoming
-        const filtered = data.filter((event: any) => {
+        const filtered = eventsArray.filter((event: any) => {
+          if (!event.start || !event.end) return false;
           const start = new Date(event.start);
           const end = new Date(event.end);
+          // Validate dates
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
           return (
             (isInCurrentMonth(start, now) || isInCurrentMonth(end, now)) &&
             (isUpcoming(start, now) || isUpcoming(end, now))
