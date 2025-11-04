@@ -212,9 +212,15 @@ exports.handleSSOCallback = async (req, res) => {
     // If not found in session, try database
     if (!oauthState || oauthState.state !== state) {
       console.log('Session state not found or mismatch, trying database...');
+      console.log('Looking for state:', state);
       const dbState = await OAuthState.findAndConsumeState(state);
       
       if (dbState) {
+        console.log('Found OAuth state in database:', {
+          platform: dbState.platform,
+          email: dbState.email,
+          provider: dbState.provider
+        });
         oauthState = {
           state: dbState.state,
           nonce: dbState.nonce,
@@ -225,8 +231,12 @@ exports.handleSSOCallback = async (req, res) => {
           platform: dbState.platform || 'web', // Include platform from database
           timestamp: dbState.createdAt.getTime()
         };
-        console.log('Found OAuth state in database');
+        console.log('OAuth state reconstructed from database with platform:', oauthState.platform);
+      } else {
+        console.error('OAuth state not found in database either!');
       }
+    } else {
+      console.log('OAuth state found in session with platform:', oauthState.platform);
     }
 
     console.log('State comparison:', {
@@ -358,10 +368,11 @@ exports.handleSSOCallback = async (req, res) => {
     
     console.log('=== SSO REDIRECT DETECTION ===');
     console.log('OAuth State Platform:', storedPlatform);
+    console.log('OAuth State Object:', JSON.stringify(oauthState, null, 2));
     console.log('User-Agent:', userAgent);
     console.log('Is Mobile User-Agent:', isMobileUserAgent);
-    console.log('Is Mobile:', isMobile);
-    console.log('Full OAuth State:', JSON.stringify(oauthState, null, 2));
+    console.log('Is Mobile (final decision):', isMobile);
+    console.log('Platform check - storedPlatform === "mobile":', storedPlatform === 'mobile');
     
     let redirectUrl;
     if (isMobile) {
@@ -369,6 +380,7 @@ exports.handleSSOCallback = async (req, res) => {
       redirectUrl = `staffbridge://sso-callback?token=${encodeURIComponent(token)}`;
       console.log('=== SSO REDIRECT (MOBILE) ===');
       console.log('Redirect URL:', redirectUrl);
+      console.log('✅ Redirecting to mobile app');
     } else {
       // Redirect to web frontend
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -376,9 +388,11 @@ exports.handleSSOCallback = async (req, res) => {
       console.log('=== SSO REDIRECT (WEB) ===');
       console.log('Frontend URL:', frontendUrl);
       console.log('Redirect URL:', redirectUrl);
+      console.log('⚠️ Redirecting to web (platform was:', storedPlatform, ')');
     }
     
     console.log('Token (first 20 chars):', token.substring(0, 20) + '...');
+    console.log('Final redirect URL:', redirectUrl);
     
     res.redirect(redirectUrl);
   } catch (error) {
