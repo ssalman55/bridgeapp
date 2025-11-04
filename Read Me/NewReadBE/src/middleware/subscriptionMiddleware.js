@@ -12,8 +12,10 @@ const checkSubscriptionStatus = async (req, res, next) => {
     }
 
     // Skip check for authentication and SSO routes
+    // Use req.originalUrl to check full path (includes mount point like /api/sso/discover)
+    // This is necessary because req.path is relative to router mount point
     const authRoutes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/sso/discover', '/sso/initiate', '/sso/callback', '/sso/break-glass-login'];
-    if (authRoutes.some(route => req.path.startsWith(route))) {
+    if (authRoutes.some(route => req.originalUrl.includes(route))) {
       return next();
     }
 

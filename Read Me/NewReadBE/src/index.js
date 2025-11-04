@@ -34,6 +34,7 @@ const expenseClaimRoutes = require('./routes/expenseClaimRoutes');
 const systemSettingsRoutes = require('./routes/systemSettingsRoutes');
 const connectDB = require('./config/db');
 const { securityHeaders, loginLimiter } = require('./middleware/security');
+const { checkSubscriptionStatus } = require('./middleware/subscriptionMiddleware');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
@@ -139,9 +140,32 @@ app.use(session({
 // Apply login rate limiter only to login route
 app.use('/api/auth/login', loginLimiter);
 
-// REMOVED: Global subscription middleware - now applied at route level after authentication
-// This allows proper middleware ordering: Authentication -> Subscription -> Feature Access
-// Each route file now handles its own subscription and feature access checks
+// Apply global subscription middleware to all API routes except auth, billing, and SSO
+app.use('/api', (req, res, next) => {
+  // Skip subscription check for auth routes, billing/payment routes, and SSO routes
+  const skipRoutes = [
+    '/auth',
+    '/stripe', 
+    '/payments',
+    '/organization/subscription-status',
+    '/enhanced-payroll', // Temporarily skip for debugging WPS
+    '/contact-sales',
+    '/health',
+    '/sso' // CRITICAL: SSO routes must be skipped as they handle authentication before subscription check
+  ];
+  
+  // Debug logging
+  console.log(`[Subscription Middleware] Path: ${req.path}, Method: ${req.method}`);
+  
+  if (skipRoutes.some(route => req.path.startsWith(route))) {
+    console.log(`[Subscription Middleware] Skipping subscription check for: ${req.path}`);
+    return next();
+  }
+  
+  console.log(`[Subscription Middleware] Applying subscription check for: ${req.path}`);
+  // Apply subscription middleware to all other routes
+  return checkSubscriptionStatus(req, res, next);
+});
 
 // Routes
 // IMPORTANT: Register /api/mobile BEFORE any catch-all /api routes to avoid middleware conflicts
