@@ -142,6 +142,7 @@ exports.initiateSSO = async (req, res) => {
     console.log('=== SSO INITIATION DEBUG ===');
     console.log('Session ID:', req.sessionID);
     console.log('Stored OAuth state:', req.session.oauthState);
+    console.log('Platform:', platform || 'web');
     console.log('Generated state:', state);
 
     // Generate authorization URL
@@ -233,6 +234,7 @@ exports.handleSSOCallback = async (req, res) => {
       storedState: oauthState?.state,
       match: oauthState?.state === state,
       hasOAuthState: !!oauthState,
+      platform: oauthState?.platform, // Log platform for debugging
       source: req.session.oauthState ? 'session' : 'database'
     });
 
@@ -349,18 +351,23 @@ exports.handleSSOCallback = async (req, res) => {
 
     // Determine redirect URL based on platform
     // Check both stored platform and User-Agent as fallback
-    const storedPlatform = oauthState.platform || 'web';
+    const storedPlatform = oauthState?.platform || 'web';
     const userAgent = req.get('User-Agent') || '';
     const isMobileUserAgent = /Mobile|Android|iPhone|iPad|okhttp/i.test(userAgent);
     const isMobile = storedPlatform === 'mobile' || isMobileUserAgent;
+    
+    console.log('=== SSO REDIRECT DETECTION ===');
+    console.log('OAuth State Platform:', storedPlatform);
+    console.log('User-Agent:', userAgent);
+    console.log('Is Mobile User-Agent:', isMobileUserAgent);
+    console.log('Is Mobile:', isMobile);
+    console.log('Full OAuth State:', JSON.stringify(oauthState, null, 2));
     
     let redirectUrl;
     if (isMobile) {
       // Redirect to mobile app custom URL scheme
       redirectUrl = `staffbridge://sso-callback?token=${encodeURIComponent(token)}`;
       console.log('=== SSO REDIRECT (MOBILE) ===');
-      console.log('Platform:', storedPlatform);
-      console.log('User-Agent:', userAgent);
       console.log('Redirect URL:', redirectUrl);
     } else {
       // Redirect to web frontend
