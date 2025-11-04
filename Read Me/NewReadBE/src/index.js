@@ -171,6 +171,13 @@ app.use('/api', (req, res, next) => {
 // IMPORTANT: Register /api/mobile BEFORE any catch-all /api routes to avoid middleware conflicts
 app.use('/api/mobile', mobileAuthRoutes);
 
+// IMPORTANT: Register SSO routes EARLY to avoid catch-all route conflicts
+app.use('/api/sso', (req, res, next) => {
+  console.log(`[INDEX] SSO route matched: ${req.method} ${req.originalUrl}`);
+  console.log(`[INDEX] SSO route path: ${req.path}`);
+  next();
+}, ssoRoutes);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -201,7 +208,7 @@ app.use('/api', roleRoutes);
 app.use('/api/bank-details', bankDetailsRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/stripe', stripeRoutes);
-app.use('/api/sso', ssoRoutes);
+// SSO routes moved earlier to avoid catch-all route conflicts (see line 175)
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/staff-profiles', staffProfileRoutes);
