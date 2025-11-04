@@ -128,7 +128,7 @@ exports.initiateSSO = async (req, res) => {
     req.session.oauthState = oauthStateData;
 
     // Store in database as fallback
-    await OAuthState.createState({
+    const savedState = await OAuthState.createState({
       state,
       nonce,
       codeVerifier,
@@ -138,6 +138,8 @@ exports.initiateSSO = async (req, res) => {
       platform: platform || 'web', // Store platform for callback redirect
       sessionId: req.sessionID
     });
+    
+    console.log('✅ OAuth state saved to database with platform:', savedState.platform);
 
     console.log('=== SSO INITIATION DEBUG ===');
     console.log('Session ID:', req.sessionID);
@@ -184,6 +186,11 @@ exports.initiateSSO = async (req, res) => {
  */
 exports.handleSSOCallback = async (req, res) => {
   try {
+    console.log('🔵 === SSO CALLBACK STARTED ===');
+    console.log('🔵 Request URL:', req.originalUrl);
+    console.log('🔵 Request Method:', req.method);
+    console.log('🔵 Request Headers User-Agent:', req.get('User-Agent'));
+    
     const { code, state, error, error_description } = req.query;
 
     console.log('=== SSO CALLBACK DEBUG ===');
@@ -360,19 +367,23 @@ exports.handleSSOCallback = async (req, res) => {
     delete req.session.oauthState;
 
     // Determine redirect URL based on platform
-    // Check both stored platform and User-Agent as fallback
+    // PRIORITY: Use stored platform from OAuth state (most reliable)
+    // FALLBACK: Check User-Agent (less reliable since browser redirects from IdP)
     const storedPlatform = oauthState?.platform || 'web';
     const userAgent = req.get('User-Agent') || '';
     const isMobileUserAgent = /Mobile|Android|iPhone|iPad|okhttp/i.test(userAgent);
-    const isMobile = storedPlatform === 'mobile' || isMobileUserAgent;
+    
+    // CRITICAL: Always prioritize stored platform over User-Agent
+    // When IdP redirects back, User-Agent will be browser, not mobile app
+    const isMobile = storedPlatform === 'mobile';
     
     console.log('=== SSO REDIRECT DETECTION ===');
-    console.log('OAuth State Platform:', storedPlatform);
-    console.log('OAuth State Object:', JSON.stringify(oauthState, null, 2));
-    console.log('User-Agent:', userAgent);
-    console.log('Is Mobile User-Agent:', isMobileUserAgent);
-    console.log('Is Mobile (final decision):', isMobile);
-    console.log('Platform check - storedPlatform === "mobile":', storedPlatform === 'mobile');
+    console.log('🔍 OAuth State Platform (PRIMARY):', storedPlatform);
+    console.log('🔍 User-Agent (SECONDARY):', userAgent);
+    console.log('🔍 Is Mobile User-Agent:', isMobileUserAgent);
+    console.log('🔍 Final Decision - Is Mobile:', isMobile);
+    console.log('🔍 Platform check - storedPlatform === "mobile":', storedPlatform === 'mobile');
+    console.log('🔍 OAuth State Object:', JSON.stringify(oauthState, null, 2));
     
     let redirectUrl;
     if (isMobile) {
